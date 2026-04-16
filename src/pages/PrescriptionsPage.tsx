@@ -24,10 +24,10 @@ const schema = z.object({
   application_method: z.enum(['Spray', 'Drench', 'Broadcast', 'Seed Treatment']),
   application_timing: z.string().optional(),
   frequency: z.enum(['Once', 'Weekly', 'Fortnightly', 'Monthly']),
-  num_applications: z.coerce.number().optional(),
+  num_applications: z.coerce.number().optional().default(1),
   precautions: z.string().optional(),
   compatibility_notes: z.string().optional(),
-  waiting_period_days: z.coerce.number().optional(),
+  waiting_period_days: z.coerce.number().optional().default(0),
   instructions: z.string().optional(),
   priority: z.coerce.number().min(1).default(1),
 });
