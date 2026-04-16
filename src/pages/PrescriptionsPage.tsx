@@ -40,7 +40,7 @@ export default function PrescriptionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) as any });
 
   const getDiagnosisName = (id: string) => diagnoses.find((d) => d.id === id)?.name || 'Unknown';
   const getProductName = (id: string) => products.find((p) => p.id === id)?.name || 'Unknown';
