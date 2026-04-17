@@ -94,8 +94,8 @@ export default function DiagnosesPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiService.delete(`/diagnoses/${id}`);
-      return response.data;
+      const response = await apiService.delete('diagnoses', id);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['diagnoses'] });
@@ -160,9 +160,9 @@ export default function DiagnosesPage() {
       <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
         <DataTable 
           data={diagnoses} 
-          columns={columns} 
+          columns={columns as any} 
           searchKeys={['diagnosis_name', 'diagnosis_name_local', 'disease_type']} 
-          onEdit={openEdit} 
+          onEdit={openEdit as any} 
           onDelete={(id) => setDeleteId(Number(id))} 
         />
 

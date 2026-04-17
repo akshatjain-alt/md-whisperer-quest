@@ -66,7 +66,7 @@ export default function CropsPage() {
 
   // Create crop mutation
   const createMutation = useMutation({
-    mutationFn: (data) => apiService.createCrop(data),
+    mutationFn: (data: FormData) => apiService.createCrop(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['crops'] });
       toast({ title: 'Crop added successfully' });
@@ -103,7 +103,7 @@ export default function CropsPage() {
 
   // Delete crop mutation
   const deleteMutation = useMutation({
-    mutationFn: (id) => apiService.deleteCrop(id),
+    mutationFn: (id: number) => apiService.deleteCrop(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['crops'] });
       toast({ title: 'Crop deleted successfully' });
@@ -168,9 +168,9 @@ export default function CropsPage() {
         <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_400px]' : ''}`}>
           <DataTable
             data={crops}
-            columns={columns}
+            columns={columns as any}
             searchKeys={['name', 'local_name', 'category']}
-            onEdit={openEdit}
+            onEdit={openEdit as any}
             onDelete={(id) => setDeleteId(Number(id))}
           />
 

@@ -3,7 +3,9 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 class ApiService {
-  private api: AxiosInstance;
+  // Public so individual pages can use the configured axios instance directly
+  // for endpoints not wrapped by typed helpers below (auth/users, etc.).
+  public api: AxiosInstance;
   private accessToken: string | null = null;
   private isRefreshing: boolean = false;
 

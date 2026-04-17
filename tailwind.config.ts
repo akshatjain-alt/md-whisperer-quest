@@ -55,6 +55,18 @@ export default {
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         info: "hsl(var(--info))",
+        role: {
+          admin: "hsl(var(--role-admin))",
+          "admin-soft": "hsl(var(--role-admin-soft))",
+          manager: "hsl(var(--role-manager))",
+          "manager-soft": "hsl(var(--role-manager-soft))",
+          agent: "hsl(var(--role-agent))",
+          "agent-soft": "hsl(var(--role-agent-soft))",
+          expert: "hsl(var(--role-expert))",
+          "expert-soft": "hsl(var(--role-expert-soft))",
+          viewer: "hsl(var(--role-viewer))",
+          "viewer-soft": "hsl(var(--role-viewer-soft))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

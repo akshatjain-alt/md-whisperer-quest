@@ -1,9 +1,11 @@
+export type UserRole = 'admin' | 'manager' | 'agent' | 'expert' | 'viewer';
+
 export interface User {
   id: number;
   email: string;
   username: string;
   full_name: string;
-  role: 'admin' | 'agent' | 'expert' | 'viewer';
+  role: UserRole;
   last_login?: string;
   created_at: string;
 }
@@ -18,7 +20,7 @@ export interface RegisterData {
   username: string;
   password: string;
   full_name?: string;
-  role: 'admin' | 'agent' | 'expert' | 'viewer';
+  role: UserRole;
 }
 
 export interface AuthState {

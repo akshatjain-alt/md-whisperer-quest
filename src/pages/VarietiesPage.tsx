@@ -76,7 +76,7 @@ export default function VarietiesPage() {
 
   // Create variety mutation
   const createMutation = useMutation({
-    mutationFn: (data) => apiService.create('varieties', data),
+    mutationFn: (data: FormData) => apiService.create('varieties', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['varieties'] });
       toast({ title: 'Variety added successfully' });
@@ -113,7 +113,7 @@ export default function VarietiesPage() {
 
   // Delete variety mutation
   const deleteMutation = useMutation({
-    mutationFn: (id) => apiService.delete('varieties', id),
+    mutationFn: (id: number) => apiService.delete('varieties', id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['varieties'] });
       toast({ title: 'Variety deleted successfully' });
@@ -200,9 +200,9 @@ export default function VarietiesPage() {
         <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_400px]' : ''}`}>
           <DataTable
             data={filteredVarieties}
-            columns={columns}
+            columns={columns as any}
             searchKeys={['variety_name', 'variety_name_local']}
-            onEdit={openEdit}
+            onEdit={openEdit as any}
             onDelete={(id) => setDeleteId(Number(id))}
           />
 

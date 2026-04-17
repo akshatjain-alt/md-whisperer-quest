@@ -107,8 +107,8 @@ export default function PrescriptionsPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiService.delete(`/prescriptions/${id}`);
-      return response.data;
+      const response = await apiService.delete('prescriptions', id);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prescriptions'] });

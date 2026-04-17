@@ -1,93 +1,104 @@
+// Backend-aligned entity types (numeric ids, snake_case fields).
+// These match the Express + Postgres API the project consumes.
+
 export interface Crop {
-  id: string;
+  id: number;
   name: string;
   local_name?: string;
   scientific_name?: string;
-  category: 'Cereal' | 'Pulse' | 'Vegetable' | 'Fruit' | 'Fiber' | 'Oilseed';
-  growing_season: 'Kharif' | 'Rabi' | 'Zaid' | 'All Year';
+  category?: string;
+  growing_season?: string;
   description?: string;
   image_url?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface CropVariety {
-  id: string;
-  crop_id: string;
-  name: string;
-  local_name?: string;
+  id: number;
+  crop_id: number;
+  variety_name: string;
+  variety_name_local?: string;
+  maturity_days?: number;
+  yield_per_acre?: string;
+  characteristics?: string;
   description?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface Symptom {
-  id: string;
-  crop_id: string;
-  name: string;
-  local_name?: string;
+  id: number;
+  crop_id?: number;
+  symptom_name: string;
+  symptom_name_local?: string;
   description?: string;
-  affected_part: string[];
-  visual_indicators: string[];
-  crop_stage: 'Seedling' | 'Vegetative' | 'Flowering' | 'Fruiting';
-  severity: 'Low' | 'Medium' | 'High' | 'Critical';
+  affected_part?: string;
+  visual_indicators?: string;
+  stage_of_crop?: string;
+  severity_level?: string;
+  symptom_type?: string;
   image_url?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface Diagnosis {
-  id: string;
-  name: string;
-  local_name?: string;
-  disease_type: 'Fungal' | 'Bacterial' | 'Viral' | 'Pest' | 'Deficiency';
+  id: number;
+  diagnosis_name: string;
+  diagnosis_name_local?: string;
+  disease_type?: string;
   causative_agent?: string;
   description?: string;
-  severity: 'Mild' | 'Moderate' | 'Severe';
-  spread_rate: 'Slow' | 'Medium' | 'Fast';
+  severity?: string;
+  spread_rate?: string;
   favorable_conditions?: string;
   prevention_tips?: string;
   image_url?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface Product {
-  id: string;
-  name: string;
-  local_name?: string;
+  id: number;
+  product_name: string;
+  product_name_local?: string;
+  product_category?: string;
   manufacturer?: string;
   active_ingredient?: string;
-  product_type: 'Fungicide' | 'Insecticide' | 'Fertilizer' | 'Herbicide' | 'Bio-agent';
   formulation?: string;
   pack_sizes?: string;
   price_range?: string;
   registration_number?: string;
-  safety_rating: 'Green' | 'Yellow' | 'Red';
+  safety_rating?: string;
   description?: string;
   image_url?: string;
-  created_at: string;
+  selling_price?: number;
+  cost_price?: number;
+  mrp?: number;
+  stock_quantity?: number;
+  created_at?: string;
 }
 
 export interface SymptomDiagnosisMapping {
-  id: string;
-  symptom_id: string;
-  diagnosis_id: string;
-  confidence: number;
-  created_at: string;
+  id: number;
+  symptom_id: number;
+  diagnosis_id: number;
+  confidence?: number;
+  created_at?: string;
 }
 
 export interface Prescription {
-  id: string;
-  diagnosis_id: string;
-  product_id: string;
+  id: number;
+  diagnosis_id: number;
+  product_id: number;
   dosage_per_litre?: string;
   dosage_per_acre?: string;
   dosage_per_bigha?: string;
-  application_method: 'Spray' | 'Drench' | 'Broadcast' | 'Seed Treatment';
+  application_method?: string;
   application_timing?: string;
-  frequency: 'Once' | 'Weekly' | 'Fortnightly' | 'Monthly';
+  frequency?: string;
   num_applications?: number;
   precautions?: string;
   compatibility_notes?: string;
   waiting_period_days?: number;
   instructions?: string;
-  priority: number;
-  created_at: string;
+  priority?: number;
+  created_at?: string;
 }
