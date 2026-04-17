@@ -10,17 +10,19 @@ export interface Column<T> {
   render?: (item: T) => React.ReactNode;
 }
 
-interface DataTableProps<T extends { id: string }> {
+type IdValue = string | number;
+
+interface DataTableProps<T extends { id: IdValue }> {
   data: T[];
   columns: Column<T>[];
   onEdit?: (item: T) => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: IdValue) => void;
   onView?: (item: T) => void;
   pageSize?: number;
   searchKeys?: string[];
 }
 
-export default function DataTable<T extends { id: string; [key: string]: any }>({
+export default function DataTable<T extends { id: IdValue }>({
   data,
   columns,
   onEdit,
@@ -36,7 +38,7 @@ export default function DataTable<T extends { id: string; [key: string]: any }>(
     if (!search) return data;
     const q = search.toLowerCase();
     return data.filter((item) =>
-      searchKeys.some((key) => String(item[key] ?? '').toLowerCase().includes(q))
+      searchKeys.some((key) => String((item as any)[key] ?? '').toLowerCase().includes(q))
     );
   }, [data, search, searchKeys]);
 
@@ -78,10 +80,10 @@ export default function DataTable<T extends { id: string; [key: string]: any }>(
               </TableRow>
             ) : (
               paged.map((item) => (
-                <TableRow key={item.id} className="hover:bg-muted/30">
+                <TableRow key={String(item.id)} className="hover:bg-muted/30">
                   {columns.map((col) => (
                     <TableCell key={col.key} className="text-sm">
-                      {col.render ? col.render(item) : String(item[col.key] ?? '')}
+                      {col.render ? col.render(item) : String((item as any)[col.key] ?? '')}
                     </TableCell>
                   ))}
                   {(onEdit || onDelete || onView) && (
