@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
-import { useStore } from '@/store/useStore';
-import type { Symptom } from '@/types';
+import { Plus, Loader2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiService from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import SeverityBadge from '@/components/SeverityBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,174 +15,291 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
+interface Symptom {
+  id: number;
+  crop_id?: number;
+  symptom_name: string;
+  symptom_name_local?: string;
+  description?: string;
+  affected_part?: string;
+  visual_indicators?: string;
+  stage_of_crop?: string;
+  severity_level?: string;
+  image_url?: string;
+}
+
 const schema = z.object({
-  name: z.string().min(2),
-  local_name: z.string().optional(),
-  crop_id: z.string().optional(),
+  symptom_name: z.string().min(2, 'Name must be at least 2 characters'),
+  symptom_name_local: z.string().optional(),
+  crop_id: z.number().optional(),
   description: z.string().optional(),
-  crop_stage: z.enum(['Seedling', 'Vegetative', 'Flowering', 'Fruiting']),
-  severity: z.enum(['Low', 'Medium', 'High', 'Critical']),
+  affected_part: z.string().optional(),
+  visual_indicators: z.string().optional(),
+  stage_of_crop: z.enum(['Seedling', 'Vegetative', 'Flowering', 'Fruiting', 'All Stages']).optional(),
+  severity_level: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
 });
+
 type FormData = z.infer<typeof schema>;
 
+const STAGES = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting', 'All Stages'] as const;
+const SEVERITY_LEVELS = ['Low', 'Medium', 'High', 'Critical'] as const;
+const AFFECTED_PARTS = ['Leaf', 'Stem', 'Root', 'Fruit', 'Flower', 'Whole Plant'] as const;
+
+const getSeverityColor = (severity?: string) => {
+  switch (severity) {
+    case 'Low': return 'bg-green-100 text-green-700';
+    case 'Medium': return 'bg-yellow-100 text-yellow-700';
+    case 'High': return 'bg-orange-100 text-orange-700';
+    case 'Critical': return 'bg-red-100 text-red-700';
+    default: return 'bg-gray-100 text-gray-700';
+  }
+};
+
 const columns: Column<Symptom>[] = [
-  { key: 'name', label: 'Symptom', render: (s) => <span className="font-medium">{s.name}</span> },
-  { key: 'local_name', label: 'Local Name' },
-  { key: 'severity', label: 'Severity', render: (s) => <SeverityBadge level={s.severity} /> },
-  { key: 'crop_stage', label: 'Crop Stage', render: (s) => <Badge variant="outline" className="text-xs">{s.crop_stage}</Badge> },
-  { key: 'affected_part', label: 'Affected Parts', render: (s) => (
-    <div className="flex flex-wrap gap-1">{s.affected_part.map((p) => <Badge key={p} variant="secondary" className="text-xs">{p}</Badge>)}</div>
-  )},
+  { key: 'symptom_name', label: 'Symptom', render: (s) => <span className="font-medium">{s.symptom_name}</span> },
+  { key: 'symptom_name_local', label: 'Local Name', render: (s) => <span>{s.symptom_name_local || '-'}</span> },
+  { key: 'severity_level', label: 'Severity', render: (s) => <Badge className={`text-xs ${getSeverityColor(s.severity_level)}`}>{s.severity_level || 'N/A'}</Badge> },
+  { key: 'stage_of_crop', label: 'Stage', render: (s) => <Badge variant="outline" className="text-xs">{s.stage_of_crop || 'N/A'}</Badge> },
+  { key: 'affected_part', label: 'Affected Part', render: (s) => <Badge variant="secondary" className="text-xs">{s.affected_part || 'N/A'}</Badge> },
 ];
 
 export default function SymptomsPage() {
-  const { symptoms, addSymptom, updateSymptom, deleteSymptom, crops } = useStore();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Symptom | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [affectedParts, setAffectedParts] = useState<string[]>([]);
-  const [indicators, setIndicators] = useState<string[]>([]);
-  const [indicatorInput, setIndicatorInput] = useState('');
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [selectedCropId, setSelectedCropId] = useState<number | undefined>();
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
 
-  const PARTS = ['Leaf', 'Stem', 'Root', 'Fruit', 'Flower'];
+  // Fetch crops for dropdown
+  const { data: crops = [] } = useQuery({
+    queryKey: ['crops'],
+    queryFn: () => apiService.getCrops(),
+  });
+
+  // Fetch symptoms
+  const { data: symptoms = [], isLoading } = useQuery({
+    queryKey: ['symptoms', selectedCropId],
+    queryFn: () => apiService.getSymptoms(selectedCropId),
+  });
+
+  // Create symptom mutation
+  const createMutation = useMutation({
+    mutationFn: (data) => apiService.createSymptom(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['symptoms'] });
+      toast({ title: 'Symptom added successfully' });
+      setShowForm(false);
+      reset();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to add symptom', 
+        description: error.response?.data?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  // Update symptom mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: FormData }) => apiService.updateSymptom(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['symptoms'] });
+      toast({ title: 'Symptom updated successfully' });
+      setShowForm(false);
+      setEditing(null);
+      reset();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to update symptom', 
+        description: error.response?.data?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
+    },
+  });
+
+  // Delete symptom mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id) => apiService.deleteSymptom(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['symptoms'] });
+      toast({ title: 'Symptom deleted successfully' });
+      setDeleteId(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: 'Failed to delete symptom', 
+        description: error.response?.data?.message || 'An error occurred',
+        variant: 'destructive' 
+      });
+    },
+  });
 
   const openNew = () => {
     setEditing(null);
-    setAffectedParts([]);
-    setIndicators([]);
-    reset({ name: '', local_name: '', description: '', crop_stage: 'Vegetative', severity: 'Medium' });
+    reset({ 
+      symptom_name: '', 
+      symptom_name_local: '', 
+      stage_of_crop: 'Vegetative', 
+      severity_level: 'Medium',
+      affected_part: 'Leaf',
+    });
     setShowForm(true);
   };
 
-  const openEdit = (s: Symptom) => {
-    setEditing(s);
-    setAffectedParts(s.affected_part);
-    setIndicators(s.visual_indicators);
-    reset(s);
+  const openEdit = (symptom: Symptom) => {
+    setEditing(symptom);
+    reset({
+      symptom_name: symptom.symptom_name,
+      symptom_name_local: symptom.symptom_name_local || '',
+      crop_id: symptom.crop_id,
+      description: symptom.description || '',
+      affected_part: symptom.affected_part || 'Leaf',
+      visual_indicators: symptom.visual_indicators || '',
+      stage_of_crop: (symptom.stage_of_crop as any) || 'Vegetative',
+      severity_level: (symptom.severity_level as any) || 'Medium',
+    });
     setShowForm(true);
   };
 
   const onSubmit = (data: FormData) => {
-    const payload = { ...data, affected_part: affectedParts, visual_indicators: indicators, crop_id: data.crop_id || '' } as Omit<Symptom, 'id' | 'created_at'>;
     if (editing) {
-      updateSymptom(editing.id, payload);
-      toast({ title: 'Symptom updated' });
+      updateMutation.mutate({ id: editing.id, data });
     } else {
-      addSymptom(payload);
-      toast({ title: 'Symptom added' });
-    }
-    setShowForm(false);
-  };
-
-  const togglePart = (p: string) => setAffectedParts((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
-
-  const addIndicator = () => {
-    if (indicatorInput.trim()) {
-      setIndicators((prev) => [...prev, indicatorInput.trim()]);
-      setIndicatorInput('');
+      createMutation.mutate(data);
     }
   };
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">🔍 Symptoms</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage crop symptom entries</p>
+          <h1 className="text-2xl font-bold text-foreground">🔍 Symptoms Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage crop symptom database</p>
         </div>
-        <Button onClick={openNew} className="bg-primary text-primary-foreground hover:bg-primary-light">
-          <Plus size={16} className="mr-2" /> Add Symptom
-        </Button>
+        <div className="flex gap-3">
+          <Select onValueChange={(v) => setSelectedCropId(v ? Number(v) : undefined)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter by crop" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Crops</SelectItem>
+              {crops.map((crop: any) => (
+                <SelectItem key={crop.id} value={String(crop.id)}>{crop.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={openNew} className="bg-primary text-primary-foreground hover:bg-primary-light">
+            <Plus size={16} className="mr-2" /> Add New Symptom
+          </Button>
+        </div>
       </div>
 
-      <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
-        <DataTable data={symptoms} columns={columns} searchKeys={['name', 'local_name']} onEdit={openEdit} onDelete={(id) => setDeleteId(id)} />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-3 text-muted-foreground">Loading symptoms...</span>
+        </div>
+      ) : (
+        <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_400px]' : ''}`}>
+          <DataTable
+            data={symptoms}
+            columns={columns}
+            searchKeys={['symptom_name', 'symptom_name_local', 'affected_part']}
+            onEdit={openEdit}
+            onDelete={(id) => setDeleteId(Number(id))}
+          />
 
-        {showForm && (
-          <div className="bg-card rounded-xl border border-border p-5 max-h-[80vh] overflow-y-auto scrollbar-thin">
-            <h2 className="text-lg font-semibold mb-4">{editing ? 'Edit Symptom' : 'Add Symptom'}</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div>
-                <Label>Symptom Name *</Label>
-                <Input {...register('name')} />
-                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
-              </div>
-              <div>
-                <Label>Local Name</Label>
-                <Input {...register('local_name')} />
-              </div>
-              <div>
-                <Label>Crop</Label>
-                <Select onValueChange={(v) => setValue('crop_id', v)}>
-                  <SelectTrigger><SelectValue placeholder="Select crop" /></SelectTrigger>
-                  <SelectContent>
-                    {crops.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Affected Parts</Label>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {PARTS.map((p) => (
-                    <Badge
-                      key={p}
-                      variant={affectedParts.includes(p) ? 'default' : 'outline'}
-                      className="cursor-pointer"
-                      onClick={() => togglePart(p)}
-                    >{p}</Badge>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Label>Visual Indicators</Label>
-                <div className="flex gap-2">
-                  <Input value={indicatorInput} onChange={(e) => setIndicatorInput(e.target.value)} placeholder="e.g. yellow spots" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIndicator(); }}} />
-                  <Button type="button" variant="outline" onClick={addIndicator}>Add</Button>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {indicators.map((ind, i) => (
-                    <Badge key={i} variant="secondary" className="cursor-pointer" onClick={() => setIndicators((p) => p.filter((_, j) => j !== i))}>
-                      {ind} ×
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+          {showForm && (
+            <div className="bg-card rounded-xl border border-border p-5">
+              <h2 className="text-lg font-semibold mb-4">{editing ? 'Edit Symptom' : 'Add New Symptom'}</h2>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div>
-                  <Label>Crop Stage</Label>
-                  <Select defaultValue={editing?.crop_stage || 'Vegetative'} onValueChange={(v) => setValue('crop_stage', v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label>Symptom Name *</Label>
+                  <Input {...register('symptom_name')} placeholder="Enter symptom name" disabled={isSubmitting} />
+                  {errors.symptom_name && <p className="text-xs text-destructive mt-1">{errors.symptom_name.message}</p>}
+                </div>
+                <div>
+                  <Label>Local Name (Hindi)</Label>
+                  <Input {...register('symptom_name_local')} placeholder="स्थानीय नाम" disabled={isSubmitting} />
+                </div>
+                <div>
+                  <Label>Related Crop</Label>
+                  <Select defaultValue={editing?.crop_id?.toString()} onValueChange={(v) => setValue('crop_id', v ? Number(v) : undefined)} disabled={isSubmitting}>
+                    <SelectTrigger><SelectValue placeholder="Select crop" /></SelectTrigger>
                     <SelectContent>
-                      {['Seedling', 'Vegetative', 'Flowering', 'Fruiting'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      <SelectItem value="">None (General)</SelectItem>
+                      {crops.map((crop: any) => <SelectItem key={crop.id} value={String(crop.id)}>{crop.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Severity</Label>
-                  <Select defaultValue={editing?.severity || 'Medium'} onValueChange={(v) => setValue('severity', v as any)}>
+                  <Label>Affected Part *</Label>
+                  <Select defaultValue={editing?.affected_part || 'Leaf'} onValueChange={(v) => setValue('affected_part', v)} disabled={isSubmitting}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['Low', 'Medium', 'High', 'Critical'].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {AFFECTED_PARTS.map((part) => <SelectItem key={part} value={part}>{part}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea {...register('description')} rows={3} />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1">Cancel</Button>
-                <Button type="submit" className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light">{editing ? 'Update' : 'Save'}</Button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
-      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} title="Delete Symptom" description="Are you sure?" onConfirm={() => { deleteSymptom(deleteId!); setDeleteId(null); toast({ title: 'Deleted' }); }} />
+                <div>
+                  <Label>Crop Stage *</Label>
+                  <Select defaultValue={editing?.stage_of_crop || 'Vegetative'} onValueChange={(v) => setValue('stage_of_crop', v as any)} disabled={isSubmitting}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STAGES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Severity Level *</Label>
+                  <Select defaultValue={editing?.severity_level || 'Medium'} onValueChange={(v) => setValue('severity_level', v as any)} disabled={isSubmitting}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SEVERITY_LEVELS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Visual Indicators</Label>
+                  <Input {...register('visual_indicators')} placeholder="What does it look like?" disabled={isSubmitting} />
+                </div>
+                <div>
+                  <Label>Description</Label>
+                  <Textarea {...register('description')} placeholder="Describe the symptom..." rows={3} disabled={isSubmitting} />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1" disabled={isSubmitting}>Cancel</Button>
+                  <Button type="submit" className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {editing ? 'Update' : 'Save Symptom'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        title="Delete Symptom"
+        description="Are you sure you want to delete this symptom? This action cannot be undone."
+        onConfirm={() => { 
+          if (deleteId) {
+            deleteMutation.mutate(deleteId);
+          }
+        }}
+      />
     </div>
   );
 }

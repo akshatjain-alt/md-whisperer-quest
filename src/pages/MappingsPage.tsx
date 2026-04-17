@@ -1,91 +1,179 @@
 import { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { Plus, X } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiService from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 
+interface Mapping {
+  id: number;
+  symptom_id: number;
+  diagnosis_id: number;
+}
+
 export default function MappingsPage() {
-  const { symptoms, diagnoses, mappings, addMapping, deleteMapping } = useStore();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedSymptom, setSelectedSymptom] = useState('');
-  const [selectedDiagnosis, setSelectedDiagnosis] = useState('');
-  const [confidence, setConfidence] = useState([80]);
+  const [selectedSymptom, setSelectedSymptom] = useState<string>('');
+  const [selectedDiagnosis, setSelectedDiagnosis] = useState<string>('');
 
-  const handleCreate = () => {
-    if (!selectedSymptom || !selectedDiagnosis) { toast({ title: 'Select both symptom and diagnosis', variant: 'destructive' }); return; }
-    addMapping({ symptom_id: selectedSymptom, diagnosis_id: selectedDiagnosis, confidence: confidence[0] });
-    toast({ title: 'Mapping created' });
-    setSelectedSymptom('');
-    setSelectedDiagnosis('');
-    setConfidence([80]);
+  // Fetch data
+  const { data: symptoms = [] } = useQuery({
+    queryKey: ['symptoms'],
+    queryFn: async () => {
+      const response = await apiService.get('/symptoms');
+      return response.data?.data || [];
+    }
+  });
+
+  const { data: diagnoses = [] } = useQuery({
+    queryKey: ['diagnoses'],
+    queryFn: async () => {
+      const response = await apiService.get('/diagnoses');
+      return response.data?.data || [];
+    }
+  });
+
+  const { data: mappings = [] } = useQuery({
+    queryKey: ['mappings'],
+    queryFn: async () => {
+      const response = await apiService.get('/mappings');
+      return response.data?.data || [];
+    }
+  });
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: { symptom_id: number; diagnosis_id: number }) => {
+      const response = await apiService.post('/mappings', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mappings'] });
+      toast({ title: 'Mapping added successfully' });
+      setSelectedSymptom('');
+      setSelectedDiagnosis('');
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add mapping', variant: 'destructive' });
+    }
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiService.delete(`/mappings/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mappings'] });
+      toast({ title: 'Mapping removed successfully' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to remove mapping', variant: 'destructive' });
+    }
+  });
+
+  const handleAdd = () => {
+    if (!selectedSymptom || !selectedDiagnosis) {
+      toast({ title: 'Error', description: 'Please select both symptom and diagnosis', variant: 'destructive' });
+      return;
+    }
+    createMutation.mutate({ symptom_id: Number(selectedSymptom), diagnosis_id: Number(selectedDiagnosis) });
   };
-
-  const getSymptomName = (id: string) => symptoms.find((s) => s.id === id)?.name || 'Unknown';
-  const getDiagnosisName = (id: string) => diagnoses.find((d) => d.id === id)?.name || 'Unknown';
 
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">🔗 Symptom-Diagnosis Links</h1>
-        <p className="text-sm text-muted-foreground mt-1">Map symptoms to possible diagnoses with confidence scores</p>
+        <h1 className="text-2xl font-bold">🔗 Symptom-Diagnosis Mappings</h1>
+        <p className="text-sm text-muted-foreground mt-1">Link symptoms to diagnoses</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="bg-card rounded-xl border border-border p-6 space-y-5">
-          <h2 className="text-lg font-semibold">Create New Mapping</h2>
-
-          <div>
-            <Label>Step 1: Select Symptom</Label>
-            <Select value={selectedSymptom} onValueChange={setSelectedSymptom}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Choose a symptom..." /></SelectTrigger>
-              <SelectContent>{symptoms.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Step 2: Select Diagnosis</Label>
-            <Select value={selectedDiagnosis} onValueChange={setSelectedDiagnosis}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Choose a diagnosis..." /></SelectTrigger>
-              <SelectContent>{diagnoses.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Step 3: Confidence Score — {confidence[0]}%</Label>
-            <Slider value={confidence} onValueChange={setConfidence} max={100} min={0} step={5} className="mt-3" />
-          </div>
-
-          <Button onClick={handleCreate} className="w-full bg-primary text-primary-foreground hover:bg-primary-light">
-            <Plus size={16} className="mr-2" /> Create Mapping
-          </Button>
-        </div>
-
-        <div className="bg-card rounded-xl border border-border p-6">
-          <h2 className="text-lg font-semibold mb-4">Existing Mappings ({mappings.length})</h2>
-          {mappings.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No mappings created yet</p>
-          ) : (
-            <div className="space-y-3">
-              {mappings.map((m) => (
-                <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {getSymptomName(m.symptom_id)} → {getDiagnosisName(m.diagnosis_id)}
+      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Mappings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {mappings.length === 0 ? (
+              <p className="text-center text-muted-foreground py-12">No mappings yet</p>
+            ) : (
+              <div className="space-y-2">
+                {mappings.map((m: Mapping) => {
+                  const symptom = symptoms.find((s: any) => s.id === m.symptom_id);
+                  const diagnosis = diagnoses.find((d: any) => d.id === m.diagnosis_id);
+                  return (
+                    <div key={m.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium">{symptom?.symptom_name || 'Unknown'}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-sm">{diagnosis?.diagnosis_name || 'Unknown'}</span>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => deleteMutation.mutate(m.id)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <X size={16} />
+                      </Button>
                     </div>
-                  </div>
-                  <Badge variant="secondary" className="text-xs shrink-0">{m.confidence}%</Badge>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => { deleteMapping(m.id); toast({ title: 'Deleted' }); }}>
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              ))}
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Add New Mapping</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Symptom</label>
+              <Select value={selectedSymptom} onValueChange={setSelectedSymptom}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select symptom" />
+                </SelectTrigger>
+                <SelectContent>
+                  {symptoms.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id.toString()}>
+                      {s.symptom_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Diagnosis</label>
+              <Select value={selectedDiagnosis} onValueChange={setSelectedDiagnosis}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select diagnosis" />
+                </SelectTrigger>
+                <SelectContent>
+                  {diagnoses.map((d: any) => (
+                    <SelectItem key={d.id} value={d.id.toString()}>
+                      {d.diagnosis_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button 
+              onClick={handleAdd} 
+              className="w-full"
+              disabled={createMutation.isPending || !selectedSymptom || !selectedDiagnosis}
+            >
+              <Plus size={16} className="mr-2" />
+              Add Mapping
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

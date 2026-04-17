@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus } from 'lucide-react';
-import { useStore } from '@/store/useStore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiService from '@/lib/api';
 import type { Prescription } from '@/types';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -12,128 +13,263 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
 const schema = z.object({
-  diagnosis_id: z.string().min(1, 'Select a diagnosis'),
-  product_id: z.string().min(1, 'Select a product'),
-  dosage_per_litre: z.string().optional(),
+  diagnosis_id: z.number(),
+  product_id: z.number(),
   dosage_per_acre: z.string().optional(),
   dosage_per_bigha: z.string().optional(),
-  application_method: z.enum(['Spray', 'Drench', 'Broadcast', 'Seed Treatment']),
-  application_timing: z.string().optional(),
-  frequency: z.enum(['Once', 'Weekly', 'Fortnightly', 'Monthly']),
-  num_applications: z.coerce.number().default(1),
+  application_method: z.string().optional(),
+  frequency: z.string().optional(),
   precautions: z.string().optional(),
-  compatibility_notes: z.string().optional(),
-  waiting_period_days: z.coerce.number().default(0),
-  instructions: z.string().optional(),
-  priority: z.coerce.number().min(1).default(1),
+  waiting_period_days: z.number().optional(),
 });
 type FormData = z.infer<typeof schema>;
 
+const columns: Column<Prescription>[] = [
+  { key: 'id', label: 'ID' },
+  { key: 'diagnosis_id', label: 'Diagnosis ID' },
+  { key: 'product_id', label: 'Product ID' },
+  { key: 'dosage_per_acre', label: 'Dosage/Acre' },
+  { key: 'application_method', label: 'Method' },
+];
+
 export default function PrescriptionsPage() {
-  const { prescriptions, addPrescription, updatePrescription, deletePrescription, diagnoses, products } = useStore();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState<Prescription | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) as any });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const getDiagnosisName = (id: string) => diagnoses.find((d) => d.id === id)?.name || 'Unknown';
-  const getProductName = (id: string) => products.find((p) => p.id === id)?.name || 'Unknown';
+  // Fetch data
+  const { data: prescriptions = [], isLoading } = useQuery({
+    queryKey: ['prescriptions'],
+    queryFn: async () => {
+      const response = await apiService.get('/prescriptions');
+      return response.data?.data || [];
+    }
+  });
 
-  const columns: Column<Prescription>[] = [
-    { key: 'diagnosis_id', label: 'Diagnosis', render: (p) => <span className="font-medium">{getDiagnosisName(p.diagnosis_id)}</span> },
-    { key: 'product_id', label: 'Product', render: (p) => <Badge variant="outline" className="text-xs">{getProductName(p.product_id)}</Badge> },
-    { key: 'dosage_per_litre', label: 'Dosage/L' },
-    { key: 'application_method', label: 'Method', render: (p) => <Badge variant="secondary" className="text-xs">{p.application_method}</Badge> },
-    { key: 'priority', label: 'Priority' },
-  ];
+  const { data: diagnoses = [] } = useQuery({
+    queryKey: ['diagnoses'],
+    queryFn: async () => {
+      const response = await apiService.get('/diagnoses');
+      return response.data?.data || [];
+    }
+  });
 
-  const openNew = () => { setEditing(null); reset({ application_method: 'Spray', frequency: 'Once', priority: 1 }); setShowForm(true); };
-  const openEdit = (p: Prescription) => { setEditing(p); reset(p); setShowForm(true); };
+  const { data: products = [] } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await apiService.get('/products');
+      return response.data?.data || [];
+    }
+  });
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const response = await apiService.post('/prescriptions', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
+      toast({ title: 'Prescription added successfully' });
+      setShowForm(false);
+      reset();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add prescription', variant: 'destructive' });
+    }
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: FormData }) => {
+      const response = await apiService.put(`/prescriptions/${id}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
+      toast({ title: 'Prescription updated successfully' });
+      setShowForm(false);
+      setEditing(null);
+      reset();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to update prescription', variant: 'destructive' });
+    }
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiService.delete(`/prescriptions/${id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
+      toast({ title: 'Prescription deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to delete prescription', variant: 'destructive' });
+    }
+  });
+
+  const openNew = () => { 
+    setEditing(null); 
+    reset({}); 
+    setShowForm(true); 
+  };
+  
+  const openEdit = (p: Prescription) => { 
+    setEditing(p); 
+    reset({
+      diagnosis_id: p.diagnosis_id,
+      product_id: p.product_id,
+      dosage_per_acre: p.dosage_per_acre || '',
+      dosage_per_bigha: p.dosage_per_bigha || '',
+      application_method: p.application_method || '',
+      frequency: p.frequency || '',
+      precautions: p.precautions || '',
+      waiting_period_days: p.waiting_period_days || undefined,
+    }); 
+    setShowForm(true); 
+  };
 
   const onSubmit = (data: FormData) => {
-    if (editing) { updatePrescription(editing.id, data); toast({ title: 'Updated' }); }
-    else { addPrescription(data as Omit<Prescription, 'id' | 'created_at'>); toast({ title: 'Prescription added' }); }
-    setShowForm(false);
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
   };
+
+  const handleDelete = () => {
+    if (deleteId) {
+      deleteMutation.mutate(deleteId);
+      setDeleteId(null);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-64">Loading...</div>;
+  }
 
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">📋 Prescriptions</h1>
-          <p className="text-sm text-muted-foreground mt-1">Link diagnoses to products with dosage info</p>
+          <p className="text-sm text-muted-foreground mt-1">Manage treatment prescriptions</p>
         </div>
         <Button onClick={openNew} className="bg-primary text-primary-foreground hover:bg-primary-light"><Plus size={16} className="mr-2" /> Add Prescription</Button>
       </div>
 
-      <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_440px]' : ''}`}>
-        <DataTable data={prescriptions} columns={columns} searchKeys={[]} onEdit={openEdit} onDelete={(id) => setDeleteId(id)} />
+      <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
+        <DataTable 
+          data={prescriptions} 
+          columns={columns} 
+          searchKeys={['diagnosis_id', 'product_id']} 
+          onEdit={openEdit} 
+          onDelete={(id) => setDeleteId(Number(id))} 
+        />
 
         {showForm && (
           <div className="bg-card rounded-xl border border-border p-5 max-h-[80vh] overflow-y-auto scrollbar-thin">
             <h2 className="text-lg font-semibold mb-4">{editing ? 'Edit' : 'Add'} Prescription</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div><Label>Diagnosis *</Label>
-                <Select defaultValue={editing?.diagnosis_id} onValueChange={(v) => setValue('diagnosis_id', v)}>
+              <div>
+                <Label>Diagnosis *</Label>
+                <Select 
+                  defaultValue={editing?.diagnosis_id?.toString()} 
+                  onValueChange={(v) => setValue('diagnosis_id', Number(v))}
+                >
                   <SelectTrigger><SelectValue placeholder="Select diagnosis" /></SelectTrigger>
-                  <SelectContent>{diagnoses.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {diagnoses.map((d: any) => (
+                      <SelectItem key={d.id} value={d.id.toString()}>
+                        {d.diagnosis_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
                 {errors.diagnosis_id && <p className="text-xs text-destructive mt-1">{errors.diagnosis_id.message}</p>}
               </div>
-              <div><Label>Product *</Label>
-                <Select defaultValue={editing?.product_id} onValueChange={(v) => setValue('product_id', v)}>
+
+              <div>
+                <Label>Product *</Label>
+                <Select 
+                  defaultValue={editing?.product_id?.toString()} 
+                  onValueChange={(v) => setValue('product_id', Number(v))}
+                >
                   <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                  <SelectContent>{products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {products.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id.toString()}>
+                        {p.product_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
                 {errors.product_id && <p className="text-xs text-destructive mt-1">{errors.product_id.message}</p>}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div><Label>Dosage/L</Label><Input {...register('dosage_per_litre')} placeholder="1ml/L" /></div>
-                <div><Label>Dosage/Acre</Label><Input {...register('dosage_per_acre')} placeholder="200ml" /></div>
-                <div><Label>Dosage/Bigha</Label><Input {...register('dosage_per_bigha')} placeholder="100ml" /></div>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Method</Label>
-                  <Select defaultValue={editing?.application_method || 'Spray'} onValueChange={(v) => setValue('application_method', v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{['Spray','Drench','Broadcast','Seed Treatment'].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                  </Select>
+                <div>
+                  <Label>Dosage per Acre</Label>
+                  <Input {...register('dosage_per_acre')} placeholder="e.g., 200ml" />
                 </div>
-                <div><Label>Frequency</Label>
-                  <Select defaultValue={editing?.frequency || 'Once'} onValueChange={(v) => setValue('frequency', v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{['Once','Weekly','Fortnightly','Monthly'].map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
-                  </Select>
+                <div>
+                  <Label>Dosage per Bigha</Label>
+                  <Input {...register('dosage_per_bigha')} placeholder="e.g., 80ml" />
                 </div>
               </div>
 
-              <div><Label>Application Timing</Label><Input {...register('application_timing')} placeholder="Morning/Evening, Crop stage" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label># Applications</Label><Input type="number" {...register('num_applications')} /></div>
-                <div><Label>Waiting Period (days)</Label><Input type="number" {...register('waiting_period_days')} /></div>
+              <div>
+                <Label>Application Method</Label>
+                <Input {...register('application_method')} placeholder="e.g., Foliar spray" />
               </div>
-              <div><Label>Priority</Label><Input type="number" {...register('priority')} /></div>
-              <div><Label>Precautions</Label><Textarea {...register('precautions')} rows={2} /></div>
-              <div><Label>Compatibility Notes</Label><Textarea {...register('compatibility_notes')} rows={2} /></div>
-              <div><Label>Instructions</Label><Textarea {...register('instructions')} rows={3} /></div>
+
+              <div>
+                <Label>Frequency</Label>
+                <Input {...register('frequency')} placeholder="e.g., Once every 15 days" />
+              </div>
+
+              <div>
+                <Label>Waiting Period (days)</Label>
+                <Input type="number" {...register('waiting_period_days', { valueAsNumber: true })} />
+              </div>
+
+              <div>
+                <Label>Precautions</Label>
+                <Textarea {...register('precautions')} rows={2} />
+              </div>
 
               <div className="flex gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1">Cancel</Button>
-                <Button type="submit" className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light">{editing ? 'Update' : 'Save'}</Button>
+                <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditing(null); }} className="flex-1">Cancel</Button>
+                <Button 
+                  type="submit" 
+                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {editing ? 'Update' : 'Save'}
+                </Button>
               </div>
             </form>
           </div>
         )}
       </div>
-      <ConfirmDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)} title="Delete Prescription" description="Are you sure?" onConfirm={() => { deletePrescription(deleteId!); setDeleteId(null); toast({ title: 'Deleted' }); }} />
+      <ConfirmDialog 
+        open={!!deleteId} 
+        onOpenChange={() => setDeleteId(null)} 
+        title="Delete Prescription" 
+        description="Are you sure? This action cannot be undone." 
+        onConfirm={handleDelete} 
+      />
     </div>
   );
 }
