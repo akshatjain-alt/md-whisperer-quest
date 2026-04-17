@@ -64,8 +64,8 @@ export default function MappingsPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiService.delete(`/mappings/${id}`);
-      return response.data;
+      const response = await apiService.delete('mappings', id);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mappings'] });

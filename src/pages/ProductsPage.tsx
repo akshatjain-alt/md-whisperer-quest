@@ -94,8 +94,8 @@ export default function ProductsPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiService.delete(`/products/${id}`);
-      return response.data;
+      const response = await apiService.delete('products', id);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
@@ -161,9 +161,9 @@ export default function ProductsPage() {
       <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
         <DataTable 
           data={products} 
-          columns={columns} 
+          columns={columns as any} 
           searchKeys={['product_name', 'product_category', 'manufacturer']} 
-          onEdit={openEdit} 
+          onEdit={openEdit as any} 
           onDelete={(id) => setDeleteId(Number(id))} 
         />
 
