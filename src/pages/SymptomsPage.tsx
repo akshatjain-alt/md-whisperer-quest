@@ -89,7 +89,7 @@ export default function SymptomsPage() {
 
   // Create symptom mutation
   const createMutation = useMutation({
-    mutationFn: (data) => apiService.createSymptom(data),
+    mutationFn: (data: FormData) => apiService.createSymptom(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['symptoms'] });
       toast({ title: 'Symptom added successfully' });
@@ -126,7 +126,7 @@ export default function SymptomsPage() {
 
   // Delete symptom mutation
   const deleteMutation = useMutation({
-    mutationFn: (id) => apiService.deleteSymptom(id),
+    mutationFn: (id: number) => apiService.deleteSymptom(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['symptoms'] });
       toast({ title: 'Symptom deleted successfully' });
@@ -212,9 +212,9 @@ export default function SymptomsPage() {
         <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_400px]' : ''}`}>
           <DataTable
             data={symptoms}
-            columns={columns}
+            columns={columns as any}
             searchKeys={['symptom_name', 'symptom_name_local', 'affected_part']}
-            onEdit={openEdit}
+            onEdit={openEdit as any}
             onDelete={(id) => setDeleteId(Number(id))}
           />
 
