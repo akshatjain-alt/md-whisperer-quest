@@ -15,6 +15,10 @@ import {
   Loader2
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  LineChart, Line, Legend,
+} from 'recharts';
 
 interface ShopPerformance {
   shop_name: string;
