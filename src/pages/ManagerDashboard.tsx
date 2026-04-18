@@ -292,6 +292,79 @@ export default function ManagerDashboard() {
           </CardContent>
         </Card>
 
+        {/* Charts: top agents + sales trend */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Award className="h-4 w-4 text-role-manager" /> Top agents by sales
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={[...agents]
+                      .sort((a, b) => (b.sales || 0) - (a.sales || 0))
+                      .slice(0, 5)
+                      .map((a) => ({ name: a.full_name?.split(' ')[0] ?? a.employee_code, sales: a.sales || 0 }))}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      formatter={(v: number) => `₹${v.toLocaleString()}`}
+                    />
+                    <Bar dataKey="sales" fill="hsl(var(--role-manager))" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {agents.length === 0 && (
+                <p className="text-xs text-center text-muted-foreground -mt-8">No agent data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-role-manager" /> Sales trend (mock)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={[
+                      { day: 'Mon', sales: 18000, target: 20000 },
+                      { day: 'Tue', sales: 22000, target: 20000 },
+                      { day: 'Wed', sales: 19500, target: 20000 },
+                      { day: 'Thu', sales: 24500, target: 20000 },
+                      { day: 'Fri', sales: 28000, target: 20000 },
+                      { day: 'Sat', sales: 31000, target: 20000 },
+                      { day: 'Sun', sales: 26500, target: 20000 },
+                    ]}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <Tooltip
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      formatter={(v: number) => `₹${v.toLocaleString()}`}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="sales" stroke="hsl(var(--role-manager))" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Quick Actions */}
         <div className="grid grid-cols-3 gap-6">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
