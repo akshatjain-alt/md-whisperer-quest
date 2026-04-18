@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { NAV_BY_ROLE, ROLE_THEME } from '@/config/navigation';
 import type { UserRole } from '@/types/auth';
+import CommandPalette from '@/components/CommandPalette';
 
 const RECENT_ACTIVITIES = [
   { id: 1, text: 'New prescription created', time: '2 min ago' },
@@ -162,13 +163,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Menu size={20} />
           </Button>
 
-          <form onSubmit={handleSearch} className="flex-1 max-w-md">
+          <form onSubmit={handleSearch} className="flex-1 max-w-md relative">
             <Input
               placeholder="Search across all data..."
-              className="h-9 bg-muted/50 border-0"
+              className="h-9 bg-muted/50 border-0 pr-16"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <kbd className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              ⌘K
+            </kbd>
           </form>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -228,6 +232,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="p-4 md:p-6">{children}</div>
         </main>
       </div>
+
+      {/* Global ⌘K palette */}
+      <CommandPalette />
     </div>
   );
 }
