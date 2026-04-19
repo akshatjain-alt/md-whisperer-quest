@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import apiService from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Sprout, Dna, Search, Stethoscope, Pill, Link2, ClipboardList, ArrowRight } from 'lucide-react';
+import { Sprout, Dna, Search, Stethoscope, Pill, Link2, ArrowRight, Clock } from 'lucide-react';
 
 const QUICK_LINKS = [
   { path: '/expert/crops', label: 'Crops', icon: Sprout, color: 'text-role-agent' },
@@ -13,6 +13,20 @@ const QUICK_LINKS = [
   { path: '/expert/products', label: 'Products', icon: Pill, color: 'text-role-admin' },
   { path: '/expert/mappings', label: 'Mappings', icon: Link2, color: 'text-role-expert' },
 ];
+
+interface ActivityItem { label: string; name: string; date: string; }
+
+function timeAgo(iso?: string) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
 
 export default function ExpertDashboardNew() {
   const navigate = useNavigate();
@@ -78,6 +92,58 @@ export default function ExpertDashboardNew() {
           <Button variant="outline" onClick={() => navigate('/expert/prescriptions')}>+ Add Prescription</Button>
         </CardContent>
       </Card>
+
+      <RecentActivity
+        crops={crops}
+        varieties={varieties}
+        symptoms={symptoms}
+        diagnoses={diagnoses}
+        products={products}
+      />
     </div>
+  );
+}
+
+function RecentActivity({ crops, varieties, symptoms, diagnoses, products }: {
+  crops: any[]; varieties: any[]; symptoms: any[]; diagnoses: any[]; products: any[];
+}) {
+  const items: ActivityItem[] = [
+    ...crops.map((c: any) => ({ label: 'Crop', name: c.name, date: c.created_at })),
+    ...varieties.map((v: any) => ({ label: 'Variety', name: v.variety_name, date: v.created_at })),
+    ...symptoms.map((s: any) => ({ label: 'Symptom', name: s.symptom_name, date: s.created_at })),
+    ...diagnoses.map((d: any) => ({ label: 'Diagnosis', name: d.diagnosis_name, date: d.created_at })),
+    ...products.map((p: any) => ({ label: 'Product', name: p.product_name, date: p.created_at })),
+  ]
+    .filter((i) => i.date)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 10);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Clock className="h-4 w-4 text-role-expert" /> Recent activity
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">No recent edits yet.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {items.map((it, idx) => (
+              <li key={idx} className="flex items-center justify-between py-2.5 text-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-role-expert/10 text-role-expert">
+                    {it.label}
+                  </span>
+                  <span className="truncate font-medium">{it.name}</span>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0 ml-3">{timeAgo(it.date)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
