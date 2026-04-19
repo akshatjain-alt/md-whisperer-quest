@@ -35,6 +35,7 @@ import { ManagerAgents, ManagerInventory, ManagerTargets } from "@/pages/manager
 import AgentDashboard from "@/pages/AgentDashboard";
 import AgentPrescription from "@/pages/AgentPrescription";
 import AgentHistory from "@/pages/AgentHistory";
+import PrescriptionPrint from "@/pages/PrescriptionPrint";
 
 // Expert
 import ExpertDashboardNew from "@/pages/expert/ExpertDashboardNew";
@@ -98,6 +99,7 @@ const App = () => (
                       {/* Agent */}
                       <Route path="/agent/dashboard" element={<AgentDashboard />} />
                       <Route path="/agent/prescription" element={<AgentPrescription />} />
+                      <Route path="/agent/prescription/:id/print" element={<PrescriptionPrint />} />
                       <Route path="/agent/history" element={<AgentHistory />} />
 
                       {/* Expert */}
