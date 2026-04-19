@@ -27,7 +27,7 @@ export default function AgentHistory() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-6">
+    <div className="animate-fade-in">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Transaction History</h1>
