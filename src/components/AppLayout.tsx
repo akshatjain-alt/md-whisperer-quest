@@ -265,18 +265,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
                   <Bell size={18} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive" />
+                  {hasUnread && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive" />
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="font-bold">Recent Activity</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-bold flex items-center justify-between">
+                  Notifications
+                  {hasUnread && (
+                    <Badge variant="secondary" className="text-[10px]">{notifications.length}</Badge>
+                  )}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {RECENT_ACTIVITIES.map((a) => (
-                  <DropdownMenuItem key={a.id} className="flex flex-col items-start py-3">
-                    <span className="text-sm font-medium">{a.text}</span>
-                    <span className="text-xs text-muted-foreground">{a.time}</span>
-                  </DropdownMenuItem>
-                ))}
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    You're all caught up.
+                  </div>
+                ) : (
+                  notifications.map((n) => {
+                    const Icon = n.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={n.id}
+                        onClick={() => n.to && navigate(n.to)}
+                        className="flex items-start gap-3 py-3 cursor-pointer"
+                      >
+                        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${TONE_CLASS[n.tone]}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{n.text}</p>
+                          {n.time && (
+                            <p className="text-xs text-muted-foreground">{n.time}</p>
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    );
+                  })
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
