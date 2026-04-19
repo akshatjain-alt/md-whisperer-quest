@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Menu, Bell, User, LogOut, Settings,
+  AlertTriangle, FileText, Stethoscope,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,12 +21,35 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NAV_BY_ROLE, ROLE_THEME } from '@/config/navigation';
 import type { UserRole } from '@/types/auth';
 import CommandPalette from '@/components/CommandPalette';
+import apiService from '@/lib/api';
 
-const RECENT_ACTIVITIES = [
-  { id: 1, text: 'New prescription created', time: '2 min ago' },
-  { id: 2, text: 'Inventory updated', time: '5 min ago' },
-  { id: 3, text: 'New customer added', time: '10 min ago' },
-];
+type Notification = {
+  id: string;
+  text: string;
+  time: string;
+  icon: typeof Bell;
+  tone: 'warning' | 'info' | 'destructive';
+  to?: string;
+};
+
+function timeAgo(iso?: string): string {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff)) return '';
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+const TONE_CLASS: Record<Notification['tone'], string> = {
+  warning: 'text-warning',
+  info: 'text-role-viewer',
+  destructive: 'text-destructive',
+};
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -38,6 +63,66 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const role: UserRole = (user?.role as UserRole) || 'viewer';
   const navItems = NAV_BY_ROLE[role] ?? [];
   const theme = ROLE_THEME[role];
+
+  // Live notifications: low-stock products, recent prescriptions, new diagnoses.
+  const { data: products = [] } = useQuery({
+    queryKey: ['notif-products'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/products'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+  const { data: prescriptions = [] } = useQuery({
+    queryKey: ['notif-prescriptions'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/prescriptions'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+  const { data: diagnoses = [] } = useQuery({
+    queryKey: ['notif-diagnoses'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/diagnoses'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+
+  const notifications: Notification[] = [
+    ...products
+      .filter((p: any) => typeof p.stock_quantity === 'number' && p.stock_quantity <= 10)
+      .slice(0, 3)
+      .map((p: any) => ({
+        id: `stock-${p.id}`,
+        text: `Low stock: ${p.product_name} (${p.stock_quantity})`,
+        time: 'Now',
+        icon: AlertTriangle,
+        tone: 'warning' as const,
+        to: '/expert/products',
+      })),
+    ...[...prescriptions]
+      .sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, 3)
+      .map((pr: any) => ({
+        id: `pres-${pr.id}`,
+        text: `New prescription #${pr.id}`,
+        time: timeAgo(pr.created_at),
+        icon: FileText,
+        tone: 'info' as const,
+        to: `/agent/prescription/${pr.id}/print`,
+      })),
+    ...[...diagnoses]
+      .sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, 2)
+      .map((d: any) => ({
+        id: `diag-${d.id}`,
+        text: `New diagnosis: ${d.diagnosis_name}`,
+        time: timeAgo(d.created_at),
+        icon: Stethoscope,
+        tone: 'destructive' as const,
+        to: role === 'viewer' ? `/viewer/diseases/${d.id}` : '/expert/diagnoses',
+      })),
+  ];
+  const hasUnread = notifications.length > 0;
 
   const handleLogout = async () => {
     await logout();
@@ -180,18 +265,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
                   <Bell size={18} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive" />
+                  {hasUnread && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive" />
+                  )}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="font-bold">Recent Activity</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-bold flex items-center justify-between">
+                  Notifications
+                  {hasUnread && (
+                    <Badge variant="secondary" className="text-[10px]">{notifications.length}</Badge>
+                  )}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {RECENT_ACTIVITIES.map((a) => (
-                  <DropdownMenuItem key={a.id} className="flex flex-col items-start py-3">
-                    <span className="text-sm font-medium">{a.text}</span>
-                    <span className="text-xs text-muted-foreground">{a.time}</span>
-                  </DropdownMenuItem>
-                ))}
+                {notifications.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    You're all caught up.
+                  </div>
+                ) : (
+                  notifications.map((n) => {
+                    const Icon = n.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={n.id}
+                        onClick={() => n.to && navigate(n.to)}
+                        className="flex items-start gap-3 py-3 cursor-pointer"
+                      >
+                        <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${TONE_CLASS[n.tone]}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{n.text}</p>
+                          {n.time && (
+                            <p className="text-xs text-muted-foreground">{n.time}</p>
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    );
+                  })
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 
