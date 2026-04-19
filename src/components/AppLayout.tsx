@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NAV_BY_ROLE, ROLE_THEME } from '@/config/navigation';
 import type { UserRole } from '@/types/auth';
 import CommandPalette from '@/components/CommandPalette';
+import ShortcutsDialog from '@/components/ShortcutsDialog';
 import apiService from '@/lib/api';
 
 type Notification = {
@@ -343,8 +344,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Global ⌘K palette */}
+      {/* Global overlays */}
       <CommandPalette />
+      <ShortcutsDialog />
     </div>
   );
 }
