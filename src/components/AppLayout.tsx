@@ -64,6 +64,66 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = NAV_BY_ROLE[role] ?? [];
   const theme = ROLE_THEME[role];
 
+  // Live notifications: low-stock products, recent prescriptions, new diagnoses.
+  const { data: products = [] } = useQuery({
+    queryKey: ['notif-products'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/products'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+  const { data: prescriptions = [] } = useQuery({
+    queryKey: ['notif-prescriptions'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/prescriptions'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+  const { data: diagnoses = [] } = useQuery({
+    queryKey: ['notif-diagnoses'],
+    queryFn: async () => {
+      try { const r = await apiService.get('/diagnoses'); return r.data?.data || []; } catch { return []; }
+    },
+    staleTime: 60_000,
+  });
+
+  const notifications: Notification[] = [
+    ...products
+      .filter((p: any) => typeof p.stock_quantity === 'number' && p.stock_quantity <= 10)
+      .slice(0, 3)
+      .map((p: any) => ({
+        id: `stock-${p.id}`,
+        text: `Low stock: ${p.product_name} (${p.stock_quantity})`,
+        time: 'Now',
+        icon: AlertTriangle,
+        tone: 'warning' as const,
+        to: '/expert/products',
+      })),
+    ...[...prescriptions]
+      .sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, 3)
+      .map((pr: any) => ({
+        id: `pres-${pr.id}`,
+        text: `New prescription #${pr.id}`,
+        time: timeAgo(pr.created_at),
+        icon: FileText,
+        tone: 'info' as const,
+        to: `/agent/prescription/${pr.id}/print`,
+      })),
+    ...[...diagnoses]
+      .sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, 2)
+      .map((d: any) => ({
+        id: `diag-${d.id}`,
+        text: `New diagnosis: ${d.diagnosis_name}`,
+        time: timeAgo(d.created_at),
+        icon: Stethoscope,
+        tone: 'destructive' as const,
+        to: role === 'viewer' ? `/viewer/diseases/${d.id}` : '/expert/diagnoses',
+      })),
+  ];
+  const hasUnread = notifications.length > 0;
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
