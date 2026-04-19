@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Menu, Bell, User, LogOut, Settings,
+  AlertTriangle, FileText, Stethoscope,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,12 +21,35 @@ import { useAuth } from '@/contexts/AuthContext';
 import { NAV_BY_ROLE, ROLE_THEME } from '@/config/navigation';
 import type { UserRole } from '@/types/auth';
 import CommandPalette from '@/components/CommandPalette';
+import apiService from '@/lib/api';
 
-const RECENT_ACTIVITIES = [
-  { id: 1, text: 'New prescription created', time: '2 min ago' },
-  { id: 2, text: 'Inventory updated', time: '5 min ago' },
-  { id: 3, text: 'New customer added', time: '10 min ago' },
-];
+type Notification = {
+  id: string;
+  text: string;
+  time: string;
+  icon: typeof Bell;
+  tone: 'warning' | 'info' | 'destructive';
+  to?: string;
+};
+
+function timeAgo(iso?: string): string {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff)) return '';
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+const TONE_CLASS: Record<Notification['tone'], string> = {
+  warning: 'text-warning',
+  info: 'text-role-viewer',
+  destructive: 'text-destructive',
+};
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
