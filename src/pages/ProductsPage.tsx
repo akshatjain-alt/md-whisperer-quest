@@ -1,23 +1,29 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pill, AlertTriangle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import apiService from '@/lib/api';
 import type { Product } from '@/types';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import PageHeader from '@/components/expert/PageHeader';
+import ResourceFormSheet from '@/components/expert/ResourceFormSheet';
+import LoadingState from '@/components/expert/LoadingState';
+import EmptyState from '@/components/expert/EmptyState';
+import { useResourceMutations } from '@/hooks/useResourceMutations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent } from '@/components/ui/card';
+
+const LOW_STOCK_THRESHOLD = 10;
 
 const schema = z.object({
-  product_name: z.string().min(2),
+  product_name: z.string().min(2, 'Name must be at least 2 characters'),
   product_category: z.string().optional(),
   manufacturer: z.string().optional(),
   active_ingredient: z.string().optional(),
@@ -30,90 +36,58 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
+const formatPrice = (n?: number) => (typeof n === 'number' ? `₹${n.toLocaleString('en-IN')}` : '—');
+
 const columns: Column<Product>[] = [
   { key: 'product_name', label: 'Product', render: (p) => <span className="font-medium">{p.product_name}</span> },
-  { key: 'product_category', label: 'Category', render: (p) => p.product_category ? <Badge variant="outline">{p.product_category}</Badge> : '-' },
-  { key: 'manufacturer', label: 'Manufacturer' },
-  { key: 'selling_price', label: 'Price', render: (p) => p.selling_price ? `₹${p.selling_price}` : '-' },
-  { key: 'stock_quantity', label: 'Stock', render: (p) => p.stock_quantity || 0 },
+  { key: 'product_category', label: 'Category', render: (p) => p.product_category ? <Badge variant="outline" className="text-xs">{p.product_category}</Badge> : '—' },
+  { key: 'manufacturer', label: 'Manufacturer', render: (p) => p.manufacturer || '—' },
+  { key: 'active_ingredient', label: 'Active', render: (p) => p.active_ingredient ? <span className="italic text-xs text-muted-foreground">{p.active_ingredient}</span> : '—' },
+  { key: 'selling_price', label: 'Price', render: (p) => formatPrice(p.selling_price), csvAccessor: (p) => p.selling_price ?? '' },
+  { key: 'stock_quantity', label: 'Stock', render: (p) => {
+      const q = p.stock_quantity ?? 0;
+      const tone = q === 0 ? 'bg-destructive/10 text-destructive' : q <= LOW_STOCK_THRESHOLD ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success';
+      return <Badge variant="outline" className={`text-xs ${tone}`}>{q}</Badge>;
+    } },
 ];
 
 export default function ProductsPage() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [editing, setEditing] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
 
-  // Fetch products from backend
-  const { data: products = [], isLoading } = useQuery({
+  const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ['products'],
     queryFn: async () => {
-      const response = await apiService.get('/products');
-      return response.data?.data || [];
-    }
+      const r = await apiService.get('/products');
+      return r.data?.data || [];
+    },
   });
 
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const response = await apiService.post('/products', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast({ title: 'Product added successfully' });
-      setShowForm(false);
-      reset();
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add product', variant: 'destructive' });
-    }
+  const lowStock = useMemo(
+    () => products.filter((p) => typeof p.stock_quantity === 'number' && p.stock_quantity <= LOW_STOCK_THRESHOLD),
+    [products]
+  );
+
+  const closeForm = () => { setShowForm(false); setEditing(null); reset(); };
+  const { createMutation, updateMutation, deleteMutation, isSubmitting } = useResourceMutations<Product, FormData>({
+    queryKey: ['products'],
+    label: 'Product',
+    create: async (data) => (await apiService.post('/products', data)).data,
+    update: async ({ id, data }) => (await apiService.put(`/products/${id}`, data)).data,
+    remove: (id) => apiService.delete('products', id),
+    onCreated: closeForm,
+    onUpdated: closeForm,
+    onRemoved: () => setDeleteId(null),
   });
 
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: FormData }) => {
-      const response = await apiService.put(`/products/${id}`, data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast({ title: 'Product updated successfully' });
-      setShowForm(false);
-      setEditing(null);
-      reset();
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to update product', variant: 'destructive' });
-    }
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await apiService.delete('products', id);
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast({ title: 'Product deleted successfully' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to delete product', variant: 'destructive' });
-    }
-  });
-
-  const openNew = () => { 
-    setEditing(null); 
-    reset({}); 
-    setShowForm(true); 
-  };
-  
-  const openEdit = (p: Product) => { 
-    setEditing(p); 
+  const openNew = () => { setEditing(null); reset({}); setShowForm(true); };
+  const openEdit = (p: Product) => {
+    setEditing(p);
     reset({
       product_name: p.product_name,
       product_category: p.product_category || '',
@@ -125,115 +99,129 @@ export default function ProductsPage() {
       cost_price: p.cost_price || undefined,
       mrp: p.mrp || undefined,
       stock_quantity: p.stock_quantity || undefined,
-    }); 
-    setShowForm(true); 
+    });
+    setShowForm(true);
   };
-
-  const onSubmit = (data: FormData) => {
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  };
-
-  const handleDelete = () => {
-    if (deleteId) {
-      deleteMutation.mutate(deleteId);
-      setDeleteId(null);
-    }
-  };
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
-  }
+  const onSubmit = handleSubmit((data) => {
+    if (editing) updateMutation.mutate({ id: editing.id, data });
+    else createMutation.mutate(data);
+  });
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">💊 Products</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage product catalog</p>
-        </div>
-        <Button onClick={openNew} className="bg-primary text-primary-foreground hover:bg-primary-light"><Plus size={16} className="mr-2" /> Add Product</Button>
-      </div>
+      <PageHeader
+        icon={Pill}
+        title="Products"
+        description="Catalog of inputs prescribed by agents and reported in analytics."
+        count={products.length}
+        countLabel="products"
+        actions={
+          <Button onClick={openNew}>
+            <Plus size={16} className="mr-1.5" /> Add product
+          </Button>
+        }
+      />
 
-      <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
-        <DataTable 
-          data={products} 
-          columns={columns as any} 
-          searchKeys={['product_name', 'product_category', 'manufacturer']} 
-          onEdit={openEdit as any} 
-          onDelete={(id) => setDeleteId(Number(id))} 
+      {lowStock.length > 0 && (
+        <Card className="mb-4 border-warning/40 bg-warning/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium">
+                {lowStock.length} product{lowStock.length === 1 ? '' : 's'} at or below {LOW_STOCK_THRESHOLD} units in stock
+              </p>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                {lowStock.slice(0, 4).map((p) => p.product_name).join(', ')}
+                {lowStock.length > 4 ? ` and ${lowStock.length - 4} more` : ''}.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <LoadingState label="Loading products…" />
+      ) : products.length === 0 ? (
+        <EmptyState
+          icon={Pill}
+          title="No products yet"
+          description="Add the first product to your catalog to start prescribing it."
+          actionLabel="Add product"
+          onAction={openNew}
         />
+      ) : (
+        <DataTable
+          data={products}
+          columns={columns as any}
+          searchKeys={['product_name', 'product_category', 'manufacturer', 'active_ingredient']}
+          onEdit={openEdit as any}
+          onDelete={(id) => setDeleteId(Number(id))}
+          exportFilename="products"
+        />
+      )}
 
-        {showForm && (
-          <div className="bg-card rounded-xl border border-border p-5 max-h-[80vh] overflow-y-auto scrollbar-thin">
-            <h2 className="text-lg font-semibold mb-4">{editing ? 'Edit' : 'Add'} Product</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div>
-                <Label>Product Name *</Label>
-                <Input {...register('product_name')} />
-                {errors.product_name && <p className="text-xs text-destructive mt-1">{errors.product_name.message}</p>}
-              </div>
-              <div>
-                <Label>Category</Label>
-                <Input {...register('product_category')} placeholder="fungicide, insecticide, etc." />
-              </div>
-              <div>
-                <Label>Manufacturer</Label>
-                <Input {...register('manufacturer')} />
-              </div>
-              <div>
-                <Label>Active Ingredient</Label>
-                <Input {...register('active_ingredient')} />
-              </div>
-              <div>
-                <Label>Formulation</Label>
-                <Input {...register('formulation')} placeholder="EC, WP, SL, etc." />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label>Cost Price</Label>
-                  <Input type="number" step="0.01" {...register('cost_price', { valueAsNumber: true })} />
-                </div>
-                <div>
-                  <Label>Selling Price</Label>
-                  <Input type="number" step="0.01" {...register('selling_price', { valueAsNumber: true })} />
-                </div>
-                <div>
-                  <Label>MRP</Label>
-                  <Input type="number" step="0.01" {...register('mrp', { valueAsNumber: true })} />
-                </div>
-              </div>
-              <div>
-                <Label>Stock Quantity</Label>
-                <Input type="number" {...register('stock_quantity', { valueAsNumber: true })} />
-              </div>
-              <div>
-                <Label>Description</Label>
-                <Textarea {...register('description')} rows={2} />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditing(null); }} className="flex-1">Cancel</Button>
-                <Button 
-                  type="submit" 
-                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editing ? 'Update' : 'Save'}
-                </Button>
-              </div>
-            </form>
+      <ResourceFormSheet
+        open={showForm}
+        onOpenChange={(o) => (o ? setShowForm(true) : closeForm())}
+        title="product"
+        isEditing={!!editing}
+        isSubmitting={isSubmitting}
+        onSubmit={onSubmit}
+      >
+        <div>
+          <Label htmlFor="product_name">Product name *</Label>
+          <Input id="product_name" {...register('product_name')} disabled={isSubmitting} />
+          {errors.product_name && <p className="text-xs text-destructive mt-1">{errors.product_name.message}</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="product_category">Category</Label>
+            <Input id="product_category" {...register('product_category')} placeholder="fungicide, fertilizer…" disabled={isSubmitting} />
           </div>
-        )}
-      </div>
-      <ConfirmDialog 
-        open={!!deleteId} 
-        onOpenChange={() => setDeleteId(null)} 
-        title="Delete Product" 
-        description="Are you sure? This action cannot be undone." 
-        onConfirm={handleDelete} 
+          <div>
+            <Label htmlFor="manufacturer">Manufacturer</Label>
+            <Input id="manufacturer" {...register('manufacturer')} disabled={isSubmitting} />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="active_ingredient">Active ingredient</Label>
+          <Input id="active_ingredient" {...register('active_ingredient')} disabled={isSubmitting} />
+        </div>
+        <div>
+          <Label htmlFor="formulation">Formulation</Label>
+          <Input id="formulation" {...register('formulation')} placeholder="EC, WP, SL…" disabled={isSubmitting} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <Label htmlFor="cost_price">Cost (₹)</Label>
+            <Input id="cost_price" type="number" step="0.01" {...register('cost_price', { valueAsNumber: true })} disabled={isSubmitting} />
+          </div>
+          <div>
+            <Label htmlFor="selling_price">Selling (₹)</Label>
+            <Input id="selling_price" type="number" step="0.01" {...register('selling_price', { valueAsNumber: true })} disabled={isSubmitting} />
+          </div>
+          <div>
+            <Label htmlFor="mrp">MRP (₹)</Label>
+            <Input id="mrp" type="number" step="0.01" {...register('mrp', { valueAsNumber: true })} disabled={isSubmitting} />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="stock_quantity">Stock quantity</Label>
+          <Input id="stock_quantity" type="number" {...register('stock_quantity', { valueAsNumber: true })} disabled={isSubmitting} />
+          <p className="text-[11px] text-muted-foreground mt-1">Alerts trigger at or below {LOW_STOCK_THRESHOLD} units.</p>
+        </div>
+        <div>
+          <Label htmlFor="description">Description</Label>
+          <Textarea id="description" {...register('description')} rows={3} disabled={isSubmitting} />
+        </div>
+      </ResourceFormSheet>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        title="Delete product"
+        description="Removing this product will detach it from any prescriptions. Continue?"
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
       />
     </div>
   );

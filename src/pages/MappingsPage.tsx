@@ -1,180 +1,203 @@
-import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { Plus, X, Link2, Search, Stethoscope } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import apiService from '@/lib/api';
+import type { Symptom, Diagnosis, SymptomDiagnosisMapping } from '@/types';
+import PageHeader from '@/components/expert/PageHeader';
+import LoadingState from '@/components/expert/LoadingState';
+import EmptyState from '@/components/expert/EmptyState';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useResourceMutations } from '@/hooks/useResourceMutations';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 
-interface Mapping {
-  id: number;
+interface FormPayload {
   symptom_id: number;
   diagnosis_id: number;
 }
 
 export default function MappingsPage() {
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedSymptom, setSelectedSymptom] = useState<string>('');
   const [selectedDiagnosis, setSelectedDiagnosis] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  // Fetch data
-  const { data: symptoms = [] } = useQuery({
+  const { data: symptoms = [], isLoading: lSym } = useQuery<Symptom[]>({
     queryKey: ['symptoms'],
-    queryFn: async () => {
-      const response = await apiService.get('/symptoms');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/symptoms')).data?.data || [],
   });
-
-  const { data: diagnoses = [] } = useQuery({
+  const { data: diagnoses = [], isLoading: lDx } = useQuery<Diagnosis[]>({
     queryKey: ['diagnoses'],
-    queryFn: async () => {
-      const response = await apiService.get('/diagnoses');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/diagnoses')).data?.data || [],
   });
-
-  const { data: mappings = [] } = useQuery({
+  const { data: mappings = [], isLoading: lMap } = useQuery<SymptomDiagnosisMapping[]>({
     queryKey: ['mappings'],
-    queryFn: async () => {
-      const response = await apiService.get('/mappings');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/mappings')).data?.data || [],
   });
 
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: async (data: { symptom_id: number; diagnosis_id: number }) => {
-      const response = await apiService.post('/mappings', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mappings'] });
-      toast({ title: 'Mapping added successfully' });
-      setSelectedSymptom('');
-      setSelectedDiagnosis('');
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add mapping', variant: 'destructive' });
-    }
+  const symptomsById = useMemo(() => new Map(symptoms.map((s) => [s.id, s.symptom_name])), [symptoms]);
+  const diagnosesById = useMemo(() => new Map(diagnoses.map((d) => [d.id, d.diagnosis_name])), [diagnoses]);
+
+  const { createMutation, deleteMutation } = useResourceMutations<SymptomDiagnosisMapping, FormPayload>({
+    queryKey: ['mappings'],
+    label: 'Mapping',
+    create: async (data) => (await apiService.post('/mappings', data)).data,
+    update: async ({ id, data }) => (await apiService.put(`/mappings/${id}`, data)).data,
+    remove: (id) => apiService.delete('mappings', id),
+    onCreated: () => { setSelectedSymptom(''); setSelectedDiagnosis(''); },
+    onRemoved: () => setDeleteId(null),
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await apiService.delete('mappings', id);
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mappings'] });
-      toast({ title: 'Mapping removed successfully' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to remove mapping', variant: 'destructive' });
-    }
-  });
+  const filteredMappings = useMemo(() => {
+    if (!search.trim()) return mappings;
+    const q = search.toLowerCase();
+    return mappings.filter((m) => {
+      const sName = (symptomsById.get(m.symptom_id) || '').toLowerCase();
+      const dName = (diagnosesById.get(m.diagnosis_id) || '').toLowerCase();
+      return sName.includes(q) || dName.includes(q);
+    });
+  }, [mappings, search, symptomsById, diagnosesById]);
+
+  // Existing pairs to disable duplicates in selectors.
+  const existingPair = useMemo(() => {
+    const set = new Set<string>();
+    mappings.forEach((m) => set.add(`${m.symptom_id}:${m.diagnosis_id}`));
+    return set;
+  }, [mappings]);
 
   const handleAdd = () => {
     if (!selectedSymptom || !selectedDiagnosis) {
-      toast({ title: 'Error', description: 'Please select both symptom and diagnosis', variant: 'destructive' });
+      toast({ title: 'Pick both a symptom and a diagnosis', variant: 'destructive' });
+      return;
+    }
+    const key = `${selectedSymptom}:${selectedDiagnosis}`;
+    if (existingPair.has(key)) {
+      toast({ title: 'That mapping already exists', variant: 'destructive' });
       return;
     }
     createMutation.mutate({ symptom_id: Number(selectedSymptom), diagnosis_id: Number(selectedDiagnosis) });
   };
 
+  const isLoading = lSym || lDx || lMap;
+
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">🔗 Symptom-Diagnosis Mappings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Link symptoms to diagnoses</p>
-      </div>
+      <PageHeader
+        icon={Link2}
+        title="Symptom ↔ Diagnosis mappings"
+        description="Connect observable symptoms to the diagnoses they signal."
+        count={mappings.length}
+        countLabel="links"
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card>
-          <CardHeader>
-            <CardTitle>Current Mappings</CardTitle>
+          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+            <CardTitle className="text-base">Existing mappings</CardTitle>
+            <div className="relative w-full max-w-[220px]">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name…"
+                className="h-8 pl-8 text-sm"
+              />
+            </div>
           </CardHeader>
           <CardContent>
-            {mappings.length === 0 ? (
-              <p className="text-center text-muted-foreground py-12">No mappings yet</p>
+            {isLoading ? (
+              <LoadingState label="Loading mappings…" />
+            ) : filteredMappings.length === 0 ? (
+              <EmptyState
+                icon={Link2}
+                title={mappings.length === 0 ? 'No mappings yet' : 'No matches'}
+                description={mappings.length === 0
+                  ? 'Connect symptoms to diagnoses so the field diagnosis flow can match them.'
+                  : 'Adjust your search to find an existing link.'}
+              />
             ) : (
-              <div className="space-y-2">
-                {mappings.map((m: Mapping) => {
-                  const symptom = symptoms.find((s: any) => s.id === m.symptom_id);
-                  const diagnosis = diagnoses.find((d: any) => d.id === m.diagnosis_id);
-                  return (
-                    <div key={m.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium">{symptom?.symptom_name || 'Unknown'}</span>
-                        <span className="text-muted-foreground">→</span>
-                        <span className="text-sm">{diagnosis?.diagnosis_name || 'Unknown'}</span>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => deleteMutation.mutate(m.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <X size={16} />
-                      </Button>
+              <ul className="divide-y divide-border">
+                {filteredMappings.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0 text-sm">
+                      <span className="font-medium truncate">{symptomsById.get(m.symptom_id) || `Symptom #${m.symptom_id}`}</span>
+                      <span className="text-muted-foreground shrink-0">→</span>
+                      <span className="truncate text-muted-foreground">{diagnosesById.get(m.diagnosis_id) || `Diagnosis #${m.diagnosis_id}`}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => setDeleteId(m.id)}
+                      aria-label="Remove mapping"
+                    >
+                      <X size={14} />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="h-fit lg:sticky lg:top-4">
           <CardHeader>
-            <CardTitle>Add New Mapping</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Plus size={16} className="text-role-expert" /> New mapping
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">Symptom</label>
+              <Label className="flex items-center gap-1.5"><Search size={12} /> Symptom</Label>
               <Select value={selectedSymptom} onValueChange={setSelectedSymptom}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select symptom" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select symptom" /></SelectTrigger>
                 <SelectContent>
-                  {symptoms.map((s: any) => (
-                    <SelectItem key={s.id} value={s.id.toString()}>
-                      {s.symptom_name}
-                    </SelectItem>
+                  {symptoms.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.symptom_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div>
-              <label className="text-sm font-medium mb-2 block">Diagnosis</label>
+              <Label className="flex items-center gap-1.5"><Stethoscope size={12} /> Diagnosis</Label>
               <Select value={selectedDiagnosis} onValueChange={setSelectedDiagnosis}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select diagnosis" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select diagnosis" /></SelectTrigger>
                 <SelectContent>
-                  {diagnoses.map((d: any) => (
-                    <SelectItem key={d.id} value={d.id.toString()}>
-                      {d.diagnosis_name}
-                    </SelectItem>
+                  {diagnoses.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>{d.diagnosis_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <Button 
-              onClick={handleAdd} 
+            <Button
               className="w-full"
+              onClick={handleAdd}
               disabled={createMutation.isPending || !selectedSymptom || !selectedDiagnosis}
             >
-              <Plus size={16} className="mr-2" />
-              Add Mapping
+              <Plus size={14} className="mr-1.5" />
+              {createMutation.isPending ? 'Linking…' : 'Add mapping'}
             </Button>
+            {symptoms.length === 0 || diagnoses.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Add at least one symptom and diagnosis first.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        title="Remove mapping"
+        description="The link between this symptom and diagnosis will be removed. You can re-add it later."
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
+      />
     </div>
   );
 }
