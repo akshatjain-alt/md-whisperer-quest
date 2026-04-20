@@ -148,7 +148,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         to: role === 'viewer' ? `/viewer/diseases/${d.id}` : '/expert/diagnoses',
       })),
   ];
-  const hasUnread = notifications.length > 0;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !readIds.has(n.id)).length,
+    [notifications, readIds]
+  );
+  const hasUnread = unreadCount > 0;
+
+  const markAllRead = () => {
+    if (notifications.length === 0) return;
+    const next = new Set(readIds);
+    notifications.forEach((n) => next.add(n.id));
+    persistRead(next);
+  };
+  const markRead = (id: string) => {
+    if (readIds.has(id)) return;
+    const next = new Set(readIds);
+    next.add(id);
+    persistRead(next);
+  };
 
   const handleLogout = async () => {
     await logout();
