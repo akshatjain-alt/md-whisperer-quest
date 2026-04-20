@@ -2,12 +2,17 @@ import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Trash2, Pencil, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Trash2, Pencil, Eye, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { downloadCsv, type CsvColumn } from '@/lib/csv';
 
 export interface Column<T> {
   key: string;
   label: string;
   render?: (item: T) => React.ReactNode;
+  /** Optional accessor for CSV export — defaults to row[key]. */
+  csvAccessor?: (item: T) => unknown;
+  /** Set true to skip this column in CSV export (e.g. action-only columns). */
+  csvSkip?: boolean;
 }
 
 type IdValue = string | number;
@@ -20,6 +25,8 @@ interface DataTableProps<T extends { id: IdValue }> {
   onView?: (item: T) => void;
   pageSize?: number;
   searchKeys?: string[];
+  /** When provided, shows an Export CSV button. Filtered (not paginated) rows are exported. */
+  exportFilename?: string;
 }
 
 export default function DataTable<T extends { id: IdValue }>({
