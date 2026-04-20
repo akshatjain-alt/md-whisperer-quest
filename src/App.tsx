@@ -44,8 +44,6 @@ import VarietiesPage from "@/pages/VarietiesPage";
 import SymptomsPage from "@/pages/SymptomsPage";
 import DiagnosesPage from "@/pages/DiagnosesPage";
 import ProductsPage from "@/pages/ProductsPage";
-import MappingsPage from "@/pages/MappingsPage";
-import PrescriptionsPage from "@/pages/PrescriptionsPage";
 
 // Viewer (wiki)
 import ViewerBrowse from "@/pages/viewer/ViewerBrowse";
@@ -109,8 +107,6 @@ const App = () => (
                       <Route path="/expert/symptoms" element={<SymptomsPage />} />
                       <Route path="/expert/diagnoses" element={<DiagnosesPage />} />
                       <Route path="/expert/products" element={<ProductsPage />} />
-                      <Route path="/expert/mappings" element={<MappingsPage />} />
-                      <Route path="/expert/prescriptions" element={<PrescriptionsPage />} />
 
                       {/* Viewer (Wikipedia-style) */}
                       <Route path="/viewer/browse" element={<ViewerBrowse />} />
@@ -135,8 +131,6 @@ const App = () => (
                       <Route path="/symptoms" element={<Navigate to="/expert/symptoms" replace />} />
                       <Route path="/diagnoses" element={<Navigate to="/expert/diagnoses" replace />} />
                       <Route path="/products" element={<Navigate to="/expert/products" replace />} />
-                      <Route path="/mappings" element={<Navigate to="/expert/mappings" replace />} />
-                      <Route path="/prescriptions" element={<Navigate to="/expert/prescriptions" replace />} />
                       <Route path="/users" element={<Navigate to="/admin/users" replace />} />
 
                       <Route path="*" element={<NotFound />} />

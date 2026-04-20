@@ -1,8 +1,8 @@
 // Centralized navigation config + role theming. Used by AppLayout sidebar.
 import {
-  LayoutDashboard, Sprout, Dna, Search, Stethoscope, Link2, Pill, ClipboardList,
+  LayoutDashboard, Sprout, Dna, Search, Stethoscope, Pill,
   Package, DollarSign, ShoppingCart, Store, Users as UsersIcon, Target,
-  Boxes, BookOpen, BookMarked, Bug, Library, History as HistoryIcon, FilePlus,
+  Boxes, Bug, Library, History as HistoryIcon, FilePlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { UserRole } from '@/types/auth';
@@ -41,8 +41,6 @@ export const NAV_BY_ROLE: Record<UserRole, NavItem[]> = {
     { path: '/expert/symptoms', label: 'Symptoms', icon: Search },
     { path: '/expert/diagnoses', label: 'Diagnoses', icon: Stethoscope },
     { path: '/expert/products', label: 'Products', icon: Pill },
-    { path: '/expert/mappings', label: 'Mappings', icon: Link2 },
-    { path: '/expert/prescriptions', label: 'Prescriptions', icon: ClipboardList },
   ],
   viewer: [
     { path: '/viewer/browse', label: 'Browse', icon: Library },
