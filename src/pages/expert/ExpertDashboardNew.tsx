@@ -174,8 +174,6 @@ export default function ExpertDashboardNew() {
           <Button variant="outline" size="sm" onClick={() => navigate('/expert/symptoms')}>+ Symptom</Button>
           <Button variant="outline" size="sm" onClick={() => navigate('/expert/diagnoses')}>+ Diagnosis</Button>
           <Button variant="outline" size="sm" onClick={() => navigate('/expert/products')}>+ Product</Button>
-          <Button variant="outline" size="sm" onClick={() => navigate('/expert/mappings')}>+ Mapping</Button>
-          <Button variant="outline" size="sm" onClick={() => navigate('/expert/prescriptions')}>+ Prescription</Button>
         </CardContent>
       </Card>
 
