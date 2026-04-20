@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useNavShortcuts } from '@/hooks/useNavShortcuts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -59,6 +60,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  // Global G+D / G+P / G+S / N / H sequence shortcuts.
+  useNavShortcuts();
+
+  // Notification read-state persisted in localStorage so the dot only fires for new IDs.
+  const READ_KEY = 'skb.readNotifications';
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(READ_KEY);
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const persistRead = (next: Set<string>) => {
+    setReadIds(next);
+    try {
+      // Cap to last 200 to avoid unbounded growth.
+      const arr = Array.from(next).slice(-200);
+      localStorage.setItem(READ_KEY, JSON.stringify(arr));
+    } catch {
+      /* ignore quota errors */
+    }
+  };
 
   // Resolve role + nav items + theme. Falls back to viewer for unknown roles.
   const role: UserRole = (user?.role as UserRole) || 'viewer';
@@ -123,7 +148,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         to: role === 'viewer' ? `/viewer/diseases/${d.id}` : '/expert/diagnoses',
       })),
   ];
-  const hasUnread = notifications.length > 0;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !readIds.has(n.id)).length,
+    [notifications, readIds]
+  );
+  const hasUnread = unreadCount > 0;
+
+  const markAllRead = () => {
+    if (notifications.length === 0) return;
+    const next = new Set(readIds);
+    notifications.forEach((n) => next.add(n.id));
+    persistRead(next);
+  };
+  const markRead = (id: string) => {
+    if (readIds.has(id)) return;
+    const next = new Set(readIds);
+    next.add(id);
+    persistRead(next);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -273,9 +315,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
                 <DropdownMenuLabel className="font-bold flex items-center justify-between">
-                  Notifications
+                  <span className="flex items-center gap-2">
+                    Notifications
+                    {hasUnread && (
+                      <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>
+                    )}
+                  </span>
                   {hasUnread && (
-                    <Badge variant="secondary" className="text-[10px]">{notifications.length}</Badge>
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); markAllRead(); }}
+                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Mark all read
+                    </button>
                   )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -286,15 +338,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ) : (
                   notifications.map((n) => {
                     const Icon = n.icon;
+                    const isRead = readIds.has(n.id);
                     return (
                       <DropdownMenuItem
                         key={n.id}
-                        onClick={() => n.to && navigate(n.to)}
-                        className="flex items-start gap-3 py-3 cursor-pointer"
+                        onClick={() => { markRead(n.id); if (n.to) navigate(n.to); }}
+                        className={`flex items-start gap-3 py-3 cursor-pointer ${isRead ? 'opacity-60' : ''}`}
                       >
                         <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${TONE_CLASS[n.tone]}`} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{n.text}</p>
+                          <p className={`text-sm truncate ${isRead ? 'font-normal' : 'font-medium'}`}>{n.text}</p>
                           {n.time && (
                             <p className="text-xs text-muted-foreground">{n.time}</p>
                           )}

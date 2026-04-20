@@ -2,12 +2,17 @@ import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Trash2, Pencil, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Trash2, Pencil, Eye, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { downloadCsv, type CsvColumn } from '@/lib/csv';
 
 export interface Column<T> {
   key: string;
   label: string;
   render?: (item: T) => React.ReactNode;
+  /** Optional accessor for CSV export — defaults to row[key]. */
+  csvAccessor?: (item: T) => unknown;
+  /** Set true to skip this column in CSV export (e.g. action-only columns). */
+  csvSkip?: boolean;
 }
 
 type IdValue = string | number;
@@ -20,6 +25,8 @@ interface DataTableProps<T extends { id: IdValue }> {
   onView?: (item: T) => void;
   pageSize?: number;
   searchKeys?: string[];
+  /** When provided, shows an Export CSV button. Filtered (not paginated) rows are exported. */
+  exportFilename?: string;
 }
 
 export default function DataTable<T extends { id: IdValue }>({
@@ -30,6 +37,7 @@ export default function DataTable<T extends { id: IdValue }>({
   onView,
   pageSize = 10,
   searchKeys = [],
+  exportFilename,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -42,19 +50,45 @@ export default function DataTable<T extends { id: IdValue }>({
     );
   }, [data, search, searchKeys]);
 
+  const handleExport = () => {
+    if (!exportFilename) return;
+    const csvColumns: CsvColumn<T>[] = columns
+      .filter((c) => !c.csvSkip)
+      .map((c) => ({
+        key: c.key,
+        label: c.label,
+        accessor: c.csvAccessor ?? ((row: T) => (row as any)[c.key]),
+      }));
+    downloadCsv(exportFilename, filtered, csvColumns);
+  };
+
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="space-y-3">
-      <div className="relative max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          className="pl-9 h-9"
-        />
+      <div className="flex items-center justify-between gap-2">
+        <div className="relative max-w-sm flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="pl-9 h-9"
+          />
+        </div>
+        {exportFilename && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={filtered.length === 0}
+            className="h-9 shrink-0"
+          >
+            <Download size={14} className="mr-1.5" />
+            Export CSV
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
