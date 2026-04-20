@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
+import { useNavShortcuts } from '@/hooks/useNavShortcuts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -59,6 +60,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  // Global G+D / G+P / G+S / N / H sequence shortcuts.
+  useNavShortcuts();
+
+  // Notification read-state persisted in localStorage so the dot only fires for new IDs.
+  const READ_KEY = 'skb.readNotifications';
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(READ_KEY);
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const persistRead = (next: Set<string>) => {
+    setReadIds(next);
+    try {
+      // Cap to last 200 to avoid unbounded growth.
+      const arr = Array.from(next).slice(-200);
+      localStorage.setItem(READ_KEY, JSON.stringify(arr));
+    } catch {
+      /* ignore quota errors */
+    }
+  };
 
   // Resolve role + nav items + theme. Falls back to viewer for unknown roles.
   const role: UserRole = (user?.role as UserRole) || 'viewer';
