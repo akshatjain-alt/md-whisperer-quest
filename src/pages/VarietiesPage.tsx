@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 const ALL_CROPS = '__all__';
 
 const schema = z.object({
-  crop_id: z.number({ invalid_type_error: 'Please select a crop' }).min(1, 'Please select a crop'),
+  crop_id: z.number({ message: 'Please select a crop' }).min(1, 'Please select a crop'),
   variety_name: z.string().min(2, 'Variety name must be at least 2 characters'),
   variety_name_local: z.string().optional(),
   maturity_days: z.number().optional(),
