@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Sprout, Dna, Search, Stethoscope, Pill, Link2, ArrowRight, Clock,
-  ClipboardList, BookOpen, AlertTriangle, CheckCircle2,
+  Sprout, Dna, Search, Stethoscope, Pill, ArrowRight, Clock,
+  BookOpen, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 
 const RESOURCE_LINKS = [
@@ -16,8 +16,6 @@ const RESOURCE_LINKS = [
   { path: '/expert/symptoms',       label: 'Symptoms',      icon: Search,         tone: 'text-warning' },
   { path: '/expert/diagnoses',      label: 'Diagnoses',     icon: Stethoscope,    tone: 'text-destructive' },
   { path: '/expert/products',       label: 'Products',      icon: Pill,           tone: 'text-role-admin' },
-  { path: '/expert/mappings',       label: 'Mappings',      icon: Link2,          tone: 'text-role-expert' },
-  { path: '/expert/prescriptions',  label: 'Prescriptions', icon: ClipboardList,  tone: 'text-role-viewer' },
 ];
 
 interface ActivityItem { label: string; name: string; date: string; href: string; }
@@ -52,50 +50,40 @@ export default function ExpertDashboardNew() {
   const { data: symptoms = [] }      = useQuery({ queryKey: ['symptoms'],      queryFn: () => apiService.getSymptoms().catch(() => []) });
   const { data: diagnoses = [] }     = useQuery({ queryKey: ['diagnoses'],     queryFn: () => safeList<any>(apiService.get('/diagnoses')) });
   const { data: products = [] }      = useQuery({ queryKey: ['products'],      queryFn: () => safeList<any>(apiService.get('/products')) });
-  const { data: mappings = [] }      = useQuery({ queryKey: ['mappings'],      queryFn: () => safeList<any>(apiService.get('/mappings')) });
-  const { data: prescriptions = [] } = useQuery({ queryKey: ['prescriptions'], queryFn: () => safeList<any>(apiService.get('/prescriptions')) });
 
   const stats = [
-    { label: 'Crops',         value: crops.length,         icon: Sprout,        tone: 'text-role-agent',   border: 'border-l-role-agent' },
-    { label: 'Varieties',     value: varieties.length,     icon: Dna,           tone: 'text-role-manager', border: 'border-l-role-manager' },
-    { label: 'Symptoms',      value: symptoms.length,      icon: Search,        tone: 'text-warning',      border: 'border-l-warning' },
-    { label: 'Diagnoses',     value: diagnoses.length,     icon: Stethoscope,   tone: 'text-destructive',  border: 'border-l-destructive' },
-    { label: 'Products',      value: products.length,      icon: Pill,          tone: 'text-role-admin',   border: 'border-l-role-admin' },
-    { label: 'Mappings',      value: mappings.length,      icon: Link2,         tone: 'text-role-expert',  border: 'border-l-role-expert' },
-    { label: 'Prescriptions', value: prescriptions.length, icon: ClipboardList, tone: 'text-role-viewer',  border: 'border-l-role-viewer' },
+    { label: 'Crops',     value: crops.length,     icon: Sprout,      tone: 'text-role-agent',   border: 'border-l-role-agent' },
+    { label: 'Varieties', value: varieties.length, icon: Dna,         tone: 'text-role-manager', border: 'border-l-role-manager' },
+    { label: 'Symptoms',  value: symptoms.length,  icon: Search,      tone: 'text-warning',      border: 'border-l-warning' },
+    { label: 'Diagnoses', value: diagnoses.length, icon: Stethoscope, tone: 'text-destructive',  border: 'border-l-destructive' },
+    { label: 'Products',  value: products.length,  icon: Pill,        tone: 'text-role-admin',   border: 'border-l-role-admin' },
   ];
 
   // Knowledge-base health: spot common gaps experts should fix.
   const health = useMemo(() => {
-    const symptomIdsWithMapping = new Set<number>(mappings.map((m: any) => m.symptom_id));
-    const orphanSymptoms = symptoms.filter((s: any) => !symptomIdsWithMapping.has(s.id));
-
-    const diagnosisIdsWithRx = new Set<number>(prescriptions.map((p: any) => p.diagnosis_id));
-    const diagnosesMissingRx = diagnoses.filter((d: any) => !diagnosisIdsWithRx.has(d.id));
-
     const cropsWithoutVarieties = (() => {
       const cropIds = new Set<number>(varieties.map((v: any) => v.crop_id));
       return crops.filter((c: any) => !cropIds.has(c.id));
     })();
 
+    const cropsWithoutSymptoms = (() => {
+      const cropIds = new Set<number>(symptoms.map((s: any) => s.crop_id).filter(Boolean));
+      return crops.filter((c: any) => !cropIds.has(c.id));
+    })();
+
     return [
-      {
-        ok: orphanSymptoms.length === 0,
-        title: orphanSymptoms.length === 0 ? 'Every symptom is mapped' : `${orphanSymptoms.length} symptoms have no diagnosis`,
-        cta: 'Open mappings', href: '/expert/mappings',
-      },
-      {
-        ok: diagnosesMissingRx.length === 0,
-        title: diagnosesMissingRx.length === 0 ? 'Every diagnosis has a prescription' : `${diagnosesMissingRx.length} diagnoses have no prescription`,
-        cta: 'Open prescriptions', href: '/expert/prescriptions',
-      },
       {
         ok: cropsWithoutVarieties.length === 0,
         title: cropsWithoutVarieties.length === 0 ? 'Every crop has at least one variety' : `${cropsWithoutVarieties.length} crops have no varieties`,
         cta: 'Open varieties', href: '/expert/varieties',
       },
+      {
+        ok: cropsWithoutSymptoms.length === 0,
+        title: cropsWithoutSymptoms.length === 0 ? 'Every crop has documented symptoms' : `${cropsWithoutSymptoms.length} crops have no symptoms`,
+        cta: 'Open symptoms', href: '/expert/symptoms',
+      },
     ];
-  }, [crops, varieties, symptoms, diagnoses, mappings, prescriptions]);
+  }, [crops, varieties, symptoms]);
 
   return (
     <div className="animate-fade-in space-y-6">
