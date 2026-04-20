@@ -1,23 +1,28 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, ClipboardList } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import apiService from '@/lib/api';
-import type { Prescription } from '@/types';
+import type { Diagnosis, Prescription, Product } from '@/types';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import PageHeader from '@/components/expert/PageHeader';
+import ResourceFormSheet from '@/components/expert/ResourceFormSheet';
+import LoadingState from '@/components/expert/LoadingState';
+import EmptyState from '@/components/expert/EmptyState';
+import { useResourceMutations } from '@/hooks/useResourceMutations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 const schema = z.object({
-  diagnosis_id: z.number(),
-  product_id: z.number(),
+  diagnosis_id: z.number({ message: 'Select a diagnosis' }),
+  product_id: z.number({ message: 'Select a product' }),
   dosage_per_acre: z.string().optional(),
   dosage_per_bigha: z.string().optional(),
   application_method: z.string().optional(),
@@ -27,106 +32,55 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
-const columns: Column<Prescription>[] = [
-  { key: 'id', label: 'ID' },
-  { key: 'diagnosis_id', label: 'Diagnosis ID' },
-  { key: 'product_id', label: 'Product ID' },
-  { key: 'dosage_per_acre', label: 'Dosage/Acre' },
-  { key: 'application_method', label: 'Method' },
-];
-
 export default function PrescriptionsPage() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [editing, setEditing] = useState<Prescription | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
 
-  // Fetch data
-  const { data: prescriptions = [], isLoading } = useQuery({
+  const { data: prescriptions = [], isLoading } = useQuery<Prescription[]>({
     queryKey: ['prescriptions'],
-    queryFn: async () => {
-      const response = await apiService.get('/prescriptions');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/prescriptions')).data?.data || [],
   });
-
-  const { data: diagnoses = [] } = useQuery({
+  const { data: diagnoses = [] } = useQuery<Diagnosis[]>({
     queryKey: ['diagnoses'],
-    queryFn: async () => {
-      const response = await apiService.get('/diagnoses');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/diagnoses')).data?.data || [],
   });
-
-  const { data: products = [] } = useQuery({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['products'],
-    queryFn: async () => {
-      const response = await apiService.get('/products');
-      return response.data?.data || [];
-    }
+    queryFn: async () => (await apiService.get('/products')).data?.data || [],
   });
 
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const response = await apiService.post('/prescriptions', data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
-      toast({ title: 'Prescription added successfully' });
-      setShowForm(false);
-      reset();
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to add prescription', variant: 'destructive' });
-    }
+  const diagnosesById = useMemo(() => new Map(diagnoses.map((d) => [d.id, d.diagnosis_name])), [diagnoses]);
+  const productsById = useMemo(() => new Map(products.map((p) => [p.id, p.product_name])), [products]);
+
+  const closeForm = () => { setShowForm(false); setEditing(null); reset(); };
+  const { createMutation, updateMutation, deleteMutation, isSubmitting } = useResourceMutations<Prescription, FormData>({
+    queryKey: ['prescriptions'],
+    label: 'Prescription',
+    create: async (data) => (await apiService.post('/prescriptions', data)).data,
+    update: async ({ id, data }) => (await apiService.put(`/prescriptions/${id}`, data)).data,
+    remove: (id) => apiService.delete('prescriptions', id),
+    onCreated: closeForm,
+    onUpdated: closeForm,
+    onRemoved: () => setDeleteId(null),
   });
 
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: FormData }) => {
-      const response = await apiService.put(`/prescriptions/${id}`, data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
-      toast({ title: 'Prescription updated successfully' });
-      setShowForm(false);
-      setEditing(null);
-      reset();
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to update prescription', variant: 'destructive' });
-    }
-  });
+  const columns: Column<Prescription>[] = useMemo(() => [
+    { key: 'diagnosis_id', label: 'Diagnosis', render: (p) => <span className="font-medium">{diagnosesById.get(p.diagnosis_id) || `#${p.diagnosis_id}`}</span>, csvAccessor: (p) => diagnosesById.get(p.diagnosis_id) || `#${p.diagnosis_id}` },
+    { key: 'product_id', label: 'Product', render: (p) => <Badge variant="outline" className="text-xs">{productsById.get(p.product_id) || `#${p.product_id}`}</Badge>, csvAccessor: (p) => productsById.get(p.product_id) || `#${p.product_id}` },
+    { key: 'dosage_per_acre', label: 'Dosage / acre', render: (p) => p.dosage_per_acre || '—' },
+    { key: 'application_method', label: 'Method', render: (p) => p.application_method || '—' },
+    { key: 'frequency', label: 'Frequency', render: (p) => p.frequency || '—' },
+    { key: 'waiting_period_days', label: 'PHI', render: (p) => p.waiting_period_days ? `${p.waiting_period_days}d` : '—' },
+  ], [diagnosesById, productsById]);
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await apiService.delete('prescriptions', id);
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
-      toast({ title: 'Prescription deleted successfully' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.response?.data?.message || 'Failed to delete prescription', variant: 'destructive' });
-    }
-  });
-
-  const openNew = () => { 
-    setEditing(null); 
-    reset({}); 
-    setShowForm(true); 
-  };
-  
-  const openEdit = (p: Prescription) => { 
-    setEditing(p); 
+  const openNew = () => { setEditing(null); reset({}); setShowForm(true); };
+  const openEdit = (p: Prescription) => {
+    setEditing(p);
     reset({
       diagnosis_id: p.diagnosis_id,
       product_id: p.product_id,
@@ -136,139 +90,116 @@ export default function PrescriptionsPage() {
       frequency: p.frequency || '',
       precautions: p.precautions || '',
       waiting_period_days: p.waiting_period_days || undefined,
-    }); 
-    setShowForm(true); 
+    });
+    setShowForm(true);
   };
+  const onSubmit = handleSubmit((data) => {
+    if (editing) updateMutation.mutate({ id: editing.id, data });
+    else createMutation.mutate(data);
+  });
 
-  const onSubmit = (data: FormData) => {
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  };
-
-  const handleDelete = () => {
-    if (deleteId) {
-      deleteMutation.mutate(deleteId);
-      setDeleteId(null);
-    }
-  };
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
-  }
+  const blocker = diagnoses.length === 0 || products.length === 0;
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">📋 Prescriptions</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage treatment prescriptions</p>
-        </div>
-        <Button onClick={openNew} className="bg-primary text-primary-foreground hover:bg-primary-light"><Plus size={16} className="mr-2" /> Add Prescription</Button>
-      </div>
+      <PageHeader
+        icon={ClipboardList}
+        title="Prescriptions"
+        description="Treatment recipes that pair a diagnosis with a recommended product and dosage."
+        count={prescriptions.length}
+        countLabel="prescriptions"
+        actions={
+          <Button onClick={openNew} disabled={blocker}>
+            <Plus size={16} className="mr-1.5" /> Add prescription
+          </Button>
+        }
+      />
 
-      <div className={`grid gap-6 ${showForm ? 'lg:grid-cols-[1fr_420px]' : ''}`}>
-        <DataTable 
-          data={prescriptions} 
-          columns={columns} 
-          searchKeys={['diagnosis_id', 'product_id']} 
-          onEdit={openEdit} 
-          onDelete={(id) => setDeleteId(Number(id))} 
+      {isLoading ? (
+        <LoadingState label="Loading prescriptions…" />
+      ) : prescriptions.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title={blocker ? 'Add diagnoses and products first' : 'No prescriptions yet'}
+          description={blocker
+            ? 'Prescriptions require at least one diagnosis and one product to link together.'
+            : 'Tie a diagnosis to a product so agents have a concrete treatment recommendation.'}
+          actionLabel={blocker ? undefined : 'Add prescription'}
+          onAction={blocker ? undefined : openNew}
         />
+      ) : (
+        <DataTable
+          data={prescriptions}
+          columns={columns as any}
+          searchKeys={['application_method', 'frequency']}
+          onEdit={openEdit as any}
+          onDelete={(id) => setDeleteId(Number(id))}
+          exportFilename="prescriptions"
+        />
+      )}
 
-        {showForm && (
-          <div className="bg-card rounded-xl border border-border p-5 max-h-[80vh] overflow-y-auto scrollbar-thin">
-            <h2 className="text-lg font-semibold mb-4">{editing ? 'Edit' : 'Add'} Prescription</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div>
-                <Label>Diagnosis *</Label>
-                <Select 
-                  defaultValue={editing?.diagnosis_id?.toString()} 
-                  onValueChange={(v) => setValue('diagnosis_id', Number(v))}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select diagnosis" /></SelectTrigger>
-                  <SelectContent>
-                    {diagnoses.map((d: any) => (
-                      <SelectItem key={d.id} value={d.id.toString()}>
-                        {d.diagnosis_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.diagnosis_id && <p className="text-xs text-destructive mt-1">{errors.diagnosis_id.message}</p>}
-              </div>
-
-              <div>
-                <Label>Product *</Label>
-                <Select 
-                  defaultValue={editing?.product_id?.toString()} 
-                  onValueChange={(v) => setValue('product_id', Number(v))}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                  <SelectContent>
-                    {products.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>
-                        {p.product_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.product_id && <p className="text-xs text-destructive mt-1">{errors.product_id.message}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Dosage per Acre</Label>
-                  <Input {...register('dosage_per_acre')} placeholder="e.g., 200ml" />
-                </div>
-                <div>
-                  <Label>Dosage per Bigha</Label>
-                  <Input {...register('dosage_per_bigha')} placeholder="e.g., 80ml" />
-                </div>
-              </div>
-
-              <div>
-                <Label>Application Method</Label>
-                <Input {...register('application_method')} placeholder="e.g., Foliar spray" />
-              </div>
-
-              <div>
-                <Label>Frequency</Label>
-                <Input {...register('frequency')} placeholder="e.g., Once every 15 days" />
-              </div>
-
-              <div>
-                <Label>Waiting Period (days)</Label>
-                <Input type="number" {...register('waiting_period_days', { valueAsNumber: true })} />
-              </div>
-
-              <div>
-                <Label>Precautions</Label>
-                <Textarea {...register('precautions')} rows={2} />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditing(null); }} className="flex-1">Cancel</Button>
-                <Button 
-                  type="submit" 
-                  className="flex-1 bg-primary text-primary-foreground hover:bg-primary-light"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editing ? 'Update' : 'Save'}
-                </Button>
-              </div>
-            </form>
+      <ResourceFormSheet
+        open={showForm}
+        onOpenChange={(o) => (o ? setShowForm(true) : closeForm())}
+        title="prescription"
+        isEditing={!!editing}
+        isSubmitting={isSubmitting}
+        onSubmit={onSubmit}
+      >
+        <div>
+          <Label>Diagnosis *</Label>
+          <Select value={watch('diagnosis_id') ? String(watch('diagnosis_id')) : ''} onValueChange={(v) => setValue('diagnosis_id', Number(v))} disabled={isSubmitting}>
+            <SelectTrigger><SelectValue placeholder="Select diagnosis" /></SelectTrigger>
+            <SelectContent>
+              {diagnoses.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.diagnosis_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {errors.diagnosis_id && <p className="text-xs text-destructive mt-1">{errors.diagnosis_id.message}</p>}
+        </div>
+        <div>
+          <Label>Product *</Label>
+          <Select value={watch('product_id') ? String(watch('product_id')) : ''} onValueChange={(v) => setValue('product_id', Number(v))} disabled={isSubmitting}>
+            <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+            <SelectContent>
+              {products.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.product_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {errors.product_id && <p className="text-xs text-destructive mt-1">{errors.product_id.message}</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="dosage_per_acre">Dosage / acre</Label>
+            <Input id="dosage_per_acre" {...register('dosage_per_acre')} placeholder="200 ml" disabled={isSubmitting} />
           </div>
-        )}
-      </div>
-      <ConfirmDialog 
-        open={!!deleteId} 
-        onOpenChange={() => setDeleteId(null)} 
-        title="Delete Prescription" 
-        description="Are you sure? This action cannot be undone." 
-        onConfirm={handleDelete} 
+          <div>
+            <Label htmlFor="dosage_per_bigha">Dosage / bigha</Label>
+            <Input id="dosage_per_bigha" {...register('dosage_per_bigha')} placeholder="80 ml" disabled={isSubmitting} />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="application_method">Application method</Label>
+          <Input id="application_method" {...register('application_method')} placeholder="Foliar spray" disabled={isSubmitting} />
+        </div>
+        <div>
+          <Label htmlFor="frequency">Frequency</Label>
+          <Input id="frequency" {...register('frequency')} placeholder="Every 15 days" disabled={isSubmitting} />
+        </div>
+        <div>
+          <Label htmlFor="waiting_period_days">Pre-harvest interval (days)</Label>
+          <Input id="waiting_period_days" type="number" {...register('waiting_period_days', { valueAsNumber: true })} disabled={isSubmitting} />
+        </div>
+        <div>
+          <Label htmlFor="precautions">Precautions</Label>
+          <Textarea id="precautions" {...register('precautions')} rows={3} disabled={isSubmitting} />
+        </div>
+      </ResourceFormSheet>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        title="Delete prescription"
+        description="Agents will no longer see this treatment for the linked diagnosis."
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
       />
     </div>
   );
