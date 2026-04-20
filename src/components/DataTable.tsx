@@ -67,14 +67,28 @@ export default function DataTable<T extends { id: IdValue }>({
 
   return (
     <div className="space-y-3">
-      <div className="relative max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          className="pl-9 h-9"
-        />
+      <div className="flex items-center justify-between gap-2">
+        <div className="relative max-w-sm flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="pl-9 h-9"
+          />
+        </div>
+        {exportFilename && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={filtered.length === 0}
+            className="h-9 shrink-0"
+          >
+            <Download size={14} className="mr-1.5" />
+            Export CSV
+          </Button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border overflow-hidden">
