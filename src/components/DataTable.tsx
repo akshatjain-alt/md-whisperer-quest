@@ -37,6 +37,7 @@ export default function DataTable<T extends { id: IdValue }>({
   onView,
   pageSize = 10,
   searchKeys = [],
+  exportFilename,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -48,6 +49,18 @@ export default function DataTable<T extends { id: IdValue }>({
       searchKeys.some((key) => String((item as any)[key] ?? '').toLowerCase().includes(q))
     );
   }, [data, search, searchKeys]);
+
+  const handleExport = () => {
+    if (!exportFilename) return;
+    const csvColumns: CsvColumn<T>[] = columns
+      .filter((c) => !c.csvSkip)
+      .map((c) => ({
+        key: c.key,
+        label: c.label,
+        accessor: c.csvAccessor ?? ((row: T) => (row as any)[c.key]),
+      }));
+    downloadCsv(exportFilename, filtered, csvColumns);
+  };
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
