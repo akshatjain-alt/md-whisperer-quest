@@ -315,9 +315,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
                 <DropdownMenuLabel className="font-bold flex items-center justify-between">
-                  Notifications
+                  <span className="flex items-center gap-2">
+                    Notifications
+                    {hasUnread && (
+                      <Badge variant="secondary" className="text-[10px]">{unreadCount} new</Badge>
+                    )}
+                  </span>
                   {hasUnread && (
-                    <Badge variant="secondary" className="text-[10px]">{notifications.length}</Badge>
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); markAllRead(); }}
+                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      Mark all read
+                    </button>
                   )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -328,15 +338,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ) : (
                   notifications.map((n) => {
                     const Icon = n.icon;
+                    const isRead = readIds.has(n.id);
                     return (
                       <DropdownMenuItem
                         key={n.id}
-                        onClick={() => n.to && navigate(n.to)}
-                        className="flex items-start gap-3 py-3 cursor-pointer"
+                        onClick={() => { markRead(n.id); if (n.to) navigate(n.to); }}
+                        className={`flex items-start gap-3 py-3 cursor-pointer ${isRead ? 'opacity-60' : ''}`}
                       >
                         <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${TONE_CLASS[n.tone]}`} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{n.text}</p>
+                          <p className={`text-sm truncate ${isRead ? 'font-normal' : 'font-medium'}`}>{n.text}</p>
                           {n.time && (
                             <p className="text-xs text-muted-foreground">{n.time}</p>
                           )}
